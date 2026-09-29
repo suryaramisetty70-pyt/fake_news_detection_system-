@@ -1,0 +1,22 @@
+streamlit
+transformers
+torch
+scikit-learn
+beautifulsoup4
+requests
+Pillow
+pytesseract
+SpeechRecognition
+langdetect
+lime
+wordcloud
+matplotlib
+plotly
+pandas
+numpy
+# SQLite is built into Python — no extra library needed!
+audio-recorder-streamlit
+streamlit-option-menu
+newspaper3k
+lxml
+lxml_html_clean
