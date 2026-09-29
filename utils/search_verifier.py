@@ -8,7 +8,6 @@ Cost: ₹0 (FREE, no API keys needed)
 import re
 import sys
 from urllib.parse import urlparse
-from ddgs import DDGS
 
 # Safe print helper to prevent UnicodeEncodeError on Windows CP1252 consoles
 def print(*args, **kwargs):
