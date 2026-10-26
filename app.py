@@ -413,7 +413,7 @@ def display_results(text: str, prediction: dict, source: str = "text_input"):
         st.markdown("#### ☁️ Word Cloud")
         wc_buf = generate_wordcloud_image(text, label)
         if wc_buf:
-            st.image(wc_buf, use_container_width=True)
+            st.image(wc_buf, width='stretch')
     
     if prediction.get('cached'):
         st.caption("⚡ This result was loaded from cache (previously analyzed).")
@@ -612,7 +612,7 @@ with tab3:
     if uploaded_image:
         from PIL import Image
         image = Image.open(uploaded_image)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image", width='stretch')
         
         if st.button("🔍 Analyze Uploaded Image", type="primary", key="analyze_image"):
             with st.spinner("🖼️ Extracting text from image (OCR)..."):
