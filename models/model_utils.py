@@ -159,15 +159,24 @@ def predict(text: str, use_transformer: bool = True) -> dict:
             'boomlive.in', 'factcrescendo.com', 'vishvasnews.com'
         }
         
+        debunk_keywords = {
+            'fake', 'false', 'hoax', 'misleading', 'debunk', 'untrue',
+            'morphed', 'fabricated', 'fraud', 'scam', 'busted', 'rumour',
+            'rumor', 'fact check', 'fact-check', 'no truth'
+        }
+        
         has_fact_check_debunk = False
         fact_check_match = None
         
         for match in web_check.get('matches', []):
             domain = match.get('domain', '')
+            match_title = match.get('title', '').lower()
             if domain in fact_checkers or any(domain.endswith('.' + fc) for fc in fact_checkers):
-                has_fact_check_debunk = True
-                fact_check_match = match
-                break
+                # Check for debunk markers in fact-checker headline
+                if any(dk in match_title for dk in debunk_keywords) or 'fact' in domain:
+                    has_fact_check_debunk = True
+                    fact_check_match = match
+                    break
                 
         if has_fact_check_debunk:
             label = 'FAKE'

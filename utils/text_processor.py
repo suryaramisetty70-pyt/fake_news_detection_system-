@@ -126,7 +126,22 @@ def clean_forwarded_text(raw_text: str) -> str:
     text = re.sub(r'\b\d{1,2}/\d{1,2}(/\d{2,4})?\b', '', text)
     text = re.sub(r'\b\d{1,2}:\d{2}(:\d{2})?(\s*[aApP][mM])?\b', '', text)
     
-    # 3. Remove sender name prefixes (e.g. "John: " or "+91 99999 99999:")
+    # Remove relative timestamps (e.g. "2 days ago", "3 hours ago", "yesterday")
+    text = re.sub(r'(?i)\b\d+\s*(second|sec|minute|min|hour|hr|day|week|month|year)s?\s*ago\b', '', text)
+    text = re.sub(r'(?i)\b(yesterday|today|just now)\b', '', text)
+    
+    # 3. Remove news agency and wire prefixes (e.g. "ANI | ", "PTI - ", "(Reuters) - ")
+    text = re.sub(r'(?i)^\s*(\((ANI|PTI|IANS|AFP|AP|REUTERS|BBC)\)|ANI|PTI|IANS|AFP|AP|REUTERS|BBC)\s*[-|:]\s*', '', text)
+    
+    # 4. Remove standalone single-word source header on the first line (e.g. "Gulte\n...")
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if len(lines) > 1 and len(lines[0].split()) == 1 and len(lines[0]) < 25:
+        # Check if first line looks like a source name, not a full sentence
+        if not lines[0].endswith(('.', '!', '?')):
+            lines = lines[1:]
+    text = '\n'.join(lines)
+    
+    # 5. Remove sender name prefixes (e.g. "John: " or "+91 99999 99999:")
     # Handles lines starting with sender names
     lines = text.split('\n')
     cleaned_lines = []
@@ -138,7 +153,7 @@ def clean_forwarded_text(raw_text: str) -> str:
     # Remove any leftover leading colon space
     text = re.sub(r'^\s*:\s*', '', text)
     
-    # 4. Strip emojis (strip characters outside Basic Multilingual Plane)
+    # 6. Strip emojis (strip characters outside Basic Multilingual Plane)
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
     
     # 5. Normalize ALL CAPS text

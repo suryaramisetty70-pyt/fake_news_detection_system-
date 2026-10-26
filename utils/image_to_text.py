@@ -110,10 +110,16 @@ def extract_text_from_image(image_input, language: str = 'English') -> dict:
         }
     
     except Exception as e:
+        error_msg = str(e)
+        if 'tesseract is not installed' in error_msg.lower() or 'not found' in error_msg.lower():
+            error_msg = (
+                "Tesseract OCR engine is not installed on this server. "
+                "Please copy and paste the text from your image directly into the 📝 Text Input tab."
+            )
         return {
             'success': False,
             'text': '',
-            'error': f'Error processing image: {str(e)}'
+            'error': f'{error_msg}'
         }
 
 

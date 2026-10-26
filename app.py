@@ -507,8 +507,40 @@ with tab2:
     
     st.markdown("---")
     
-    # Audio upload option (works on deployed version)
-    st.markdown("#### 📁 Upload Audio File")
+    # 1. Direct browser microphone recording option
+    st.markdown("#### 🎙️ Record Voice in Browser")
+    st.caption("Click the microphone button to start recording, speak the headline, then click again to finish.")
+    try:
+        from audio_recorder_streamlit import audio_recorder
+        mic_audio_bytes = audio_recorder(
+            text="Click microphone to record",
+            recording_color="#e8b62c",
+            neutral_color="#667eea",
+            icon_size="2x",
+            key="mic_recorder"
+        )
+        if mic_audio_bytes:
+            st.audio(mic_audio_bytes, format="audio/wav")
+            if st.button("🔍 Analyze Recorded Voice", type="primary", key="analyze_mic_voice"):
+                with st.spinner("🎤 Converting speech to text..."):
+                    from utils.speech_to_text import convert_audio_to_text
+                    result = convert_audio_to_text(mic_audio_bytes, language=voice_language)
+                    if result['success']:
+                        st.success(f"✅ Transcribed text ({voice_language}):")
+                        st.markdown(f"> {result['text']}")
+                        cleaned = clean_text(result['text'])
+                        with st.spinner("🧠 Analyzing with AI..."):
+                            prediction = predict(cleaned)
+                            display_results(cleaned, prediction, source="voice")
+                    else:
+                        st.error(f"❌ {result['error']}")
+    except Exception as e:
+        st.info("Direct microphone component not available. Use the audio file upload below.")
+    
+    st.markdown("---")
+    
+    # 2. Audio upload option (works on deployed version)
+    st.markdown("#### 📁 Or Upload Audio File")
     st.caption("Upload a WAV audio file to convert to text and analyze.")
     
     audio_file = st.file_uploader(
@@ -668,6 +700,9 @@ with tab4:
                     if label == 'FAKE':
                         badge = "🔴"
                         badge_color = "#FF4B4B"
+                    elif label == 'UNABLE TO VERIFY':
+                        badge = "🟡"
+                        badge_color = "#FFBB00"
                     else:
                         badge = "🟢"
                         badge_color = "#00CC66"

@@ -88,6 +88,40 @@ def scrape_headlines(newspaper_key: str, max_headlines: int = 15) -> dict:
             if len(headlines) >= max_headlines:
                 break
         
+        # If HTML selectors matched 0 headlines (due to website redesign or bot blocking),
+        # fall back to Google News RSS for this newspaper's domain
+        if not headlines:
+            from urllib.parse import urlparse
+            import xml.etree.ElementTree as ET
+            domain = urlparse(config['base_url']).netloc.replace('www.', '')
+            lang_codes = {
+                'Telugu': ('te', 'IN:te'),
+                'Tamil': ('ta', 'IN:ta'),
+                'Hindi': ('hi', 'IN:hi'),
+                'English': ('en-IN', 'IN:en')
+            }
+            hl, ceid = lang_codes.get(config.get('language', 'English'), ('en-IN', 'IN:en'))
+            rss_url = f"https://news.google.com/rss/search?q=site:{domain}&hl={hl}&gl=IN&ceid={ceid}"
+            try:
+                rss_resp = requests.get(rss_url, headers=HEADERS, timeout=10)
+                if rss_resp.status_code == 200:
+                    root = ET.fromstring(rss_resp.content)
+                    for item in root.findall('.//item')[:max_headlines]:
+                        t = item.find('title')
+                        l = item.find('link')
+                        if t is not None and t.text:
+                            raw_t = t.text
+                            if " - " in raw_t:
+                                raw_t = raw_t.rsplit(" - ", 1)[0]
+                            headlines.append({
+                                'title': raw_t.strip(),
+                                'url': l.text if l is not None and l.text else config['base_url'],
+                                'newspaper': config['name'],
+                                'language': config['language'],
+                            })
+            except Exception:
+                pass
+        
         return {
             'success': True,
             'newspaper': config['name'],

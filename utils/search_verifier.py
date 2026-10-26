@@ -71,7 +71,29 @@ TRUSTED_DOMAINS = {
     
     # ─── North India (Hindi - UP, Bihar, MP, Rajasthan, Haryana, etc.) ───
     'jagran.com', 'amarujala.com', 'bhaskar.com', 'jansatta.com', 
-    'livehindustan.com', 'navbharattimes.indiatimes.com', 'patrika.com'
+    'livehindustan.com', 'navbharattimes.indiatimes.com', 'patrika.com',
+    
+    # ─── Entertainment, Cinema & Sports (National & Regional) ───
+    'gulte.com', '123telugu.com', 'greatandhra.com', 'mirchi9.com',
+    'pinkvilla.com', 'bollywoodhungama.com', 'cinemaexpress.com',
+    'filmibeat.com', 'ottplay.com', 'espncricinfo.com', 'cricbuzz.com'
+}
+
+# Global Stopwords for search queries and title overlap
+GLOBAL_STOPWORDS = {
+    'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
+    'to', 'of', 'in', 'on', 'for', 'with', 'at', 'by', 'from', 'about',
+    'as', 'into', 'like', 'through', 'after', 'over', 'between', 'out',
+    'against', 'during', 'without', 'before', 'under', 'around', 'among',
+    'that', 'this', 'these', 'those', 'it', 'its', 'they', 'them', 'he',
+    'him', 'she', 'her', 'we', 'us', 'you', 'your', 'my', 'our', 'what',
+    'who', 'whom', 'which', 'how', 'why', 'where', 'when', 'according',
+    'reports', 'report', 'breaking', 'exclusive', 'news', 'can', 'could',
+    'will', 'would', 'shall', 'should', 'may', 'might', 'must', 'do',
+    'does', 'did', 'have', 'has', 'had', 'having', 'been', 'being',
+    'ago', 'days', 'day', 'hours', 'hour', 'mins', 'minutes', 'yesterday',
+    'today', 'tomorrow', 'headline', 'read', 'click', 'share', 'view',
+    'watch', 'update', 'updates'
 }
 
 
@@ -112,19 +134,8 @@ def _extract_search_query(text: str) -> str:
     # Remove special characters but keep Unicode letters, combining marks and spaces
     text = _clean_punctuation(text)
     
-    stopwords = {
-        'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
-        'to', 'of', 'in', 'on', 'for', 'with', 'at', 'by', 'from', 'about',
-        'as', 'into', 'like', 'through', 'after', 'over', 'between', 'out',
-        'against', 'during', 'without', 'before', 'under', 'around', 'among',
-        'that', 'this', 'these', 'those', 'it', 'its', 'they', 'them', 'he',
-        'him', 'she', 'her', 'we', 'us', 'you', 'your', 'my', 'our', 'what',
-        'who', 'whom', 'which', 'how', 'why', 'where', 'when', 'according',
-        'reports', 'report', 'breaking', 'exclusive', 'news'
-    }
-    
     words = text.split()
-    key_words = [w for w in words if w.lower() not in stopwords]
+    key_words = [w for w in words if w.lower() not in GLOBAL_STOPWORDS]
     
     # Take first 6 key words
     query_words = key_words[:6] if len(key_words) >= 6 else key_words
@@ -232,7 +243,7 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
             time.sleep(delay)
             
         try:
-            response = requests.get(search_url, headers=headers, timeout=5)
+            response = requests.get(search_url, headers=headers, timeout=8)
             print(f"[Verifier Log] HTTP Status Code received: {response.status_code}")
             response.raise_for_status()
             break
@@ -291,20 +302,9 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
                     is_trusted = True
                     break
             
-            # Calculate title keyword overlap
-            stopwords = {
-                'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
-                'to', 'of', 'in', 'on', 'for', 'with', 'at', 'by', 'from', 'about',
-                'as', 'into', 'like', 'through', 'after', 'over', 'between', 'out',
-                'against', 'during', 'without', 'before', 'under', 'around', 'among',
-                'that', 'this', 'these', 'those', 'it', 'its', 'they', 'them', 'he',
-                'him', 'she', 'her', 'we', 'us', 'you', 'your', 'my', 'our', 'what',
-                'who', 'whom', 'which', 'how', 'why', 'where', 'when', 'according',
-                'reports', 'report', 'breaking', 'exclusive', 'news'
-            }
-            
+            # Calculate title keyword overlap using GLOBAL_STOPWORDS
             query_clean = _clean_punctuation(query)
-            query_words = {w.lower() for w in query_clean.split() if w.lower() not in stopwords}
+            query_words = {w.lower() for w in query_clean.split() if w.lower() not in GLOBAL_STOPWORDS}
             query_stems = {_stem_word(w) for w in query_words}
             
             # Google News titles usually append the source name at the end (e.g., "- Reuters")
@@ -314,7 +314,7 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
                 title_clean = title.rsplit(" - ", 1)[0]
                 
             title_clean = _clean_punctuation(title_clean)
-            title_words = {w.lower() for w in title_clean.split() if w.lower() not in stopwords}
+            title_words = {w.lower() for w in title_clean.split() if w.lower() not in GLOBAL_STOPWORDS}
             title_stems = {_stem_word(w) for w in title_words}
             
             overlap = query_stems.intersection(title_stems)
@@ -329,9 +329,11 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
             # Only accept match if domain is trusted AND keyword overlap is at least OVERLAP_THRESHOLD
             if is_trusted and overlap_ratio >= OVERLAP_THRESHOLD and domain not in seen_domains:
                 seen_domains.add(domain)
+                # Link directly to Google News redirect link so user reaches the full story
+                article_url = link if link and link.startswith('http') else source_url
                 matches.append({
                     'title': title,
-                    'url': source_url,
+                    'url': article_url,
                     'domain': domain,
                     'snippet': f"Reported by {domain}. Article title: '{title}'"
                 })
