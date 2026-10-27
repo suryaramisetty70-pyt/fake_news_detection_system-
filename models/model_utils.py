@@ -121,12 +121,27 @@ def predict(text: str, use_transformer: bool = True) -> dict:
     # 1. Clean WhatsApp/MMS forward junk before running prediction
     cleaned_text = clean_forwarded_text(text)
     
+    # Analyze social media vectors & viral forwarding cues
+    from utils.social_verifier import analyze_social_context
+    social_context = analyze_social_context(text)
+    
+    # Linguistic & Emotional Analysis (aryashah2k & Dual-Emotion inspired)
+    from utils.linguistic_analyzer import analyze_linguistics
+    linguistics = analyze_linguistics(cleaned_text)
+    
+    # Multi-Model Voting Ensemble (sneyhaa & vijaisuria inspired)
+    from models.ensemble_classifier import predict_ensemble
+    ensemble = predict_ensemble(cleaned_text)
+    
     if not cleaned_text or len(cleaned_text.strip()) < 8:
         return {
             'label': 'UNKNOWN',
             'confidence': 0.0,
             'probabilities': {'FAKE': 0.0, 'REAL': 0.0},
             'model_type': 'none',
+            'social_context': social_context,
+            'linguistics': linguistics,
+            'ensemble': ensemble,
             'error': 'Text is too short for analysis. Please provide more content.'
         }
         
@@ -148,7 +163,11 @@ def predict(text: str, use_transformer: bool = True) -> dict:
             'message': message,
             'probabilities': {'FAKE': 0.0, 'REAL': 0.0},
             'model_type': 'search_verification',
-            'web_check': web_check
+            'web_check': web_check,
+            'social_context': social_context,
+            'linguistics': linguistics,
+            'ensemble': ensemble,
+            'language': lang_info
         }
     
     # 3. Search returned results, evaluate verification
@@ -188,7 +207,11 @@ def predict(text: str, use_transformer: bool = True) -> dict:
                 'message': message,
                 'probabilities': {'FAKE': 0.85, 'REAL': 0.15},
                 'model_type': 'search_verification',
-                'web_check': web_check
+                'web_check': web_check,
+                'social_context': social_context,
+                'linguistics': linguistics,
+                'ensemble': ensemble,
+                'language': lang_info
             }
         else:
             label = 'REAL'
@@ -201,7 +224,11 @@ def predict(text: str, use_transformer: bool = True) -> dict:
                     'REAL': round(confidence, 4)
                 },
                 'model_type': 'search_verification',
-                'web_check': web_check
+                'web_check': web_check,
+                'social_context': social_context,
+                'linguistics': linguistics,
+                'ensemble': ensemble,
+                'language': lang_info
             }
     else:
         # Search returned results, but no matches on trusted domains.
@@ -215,7 +242,11 @@ def predict(text: str, use_transformer: bool = True) -> dict:
             'message': message,
             'probabilities': {'FAKE': 0.0, 'REAL': 0.0},
             'model_type': 'search_verification',
-            'web_check': web_check
+            'web_check': web_check,
+            'social_context': social_context,
+            'linguistics': linguistics,
+            'ensemble': ensemble,
+            'language': lang_info
         }
 
 

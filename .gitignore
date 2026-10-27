@@ -43,3 +43,4 @@ data/*.csv
 
 # Temporary database files & logs
 *.log
+.streamlit/credentials.toml

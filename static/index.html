@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TruthLens AI — All-India Fake News Detection & Real-Time Verification</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0A0D14',
+                        surface: '#121722',
+                        surfaceBorder: '#1F293D',
+                        primary: '#6366F1',
+                        accent: '#8B5CF6',
+                        realGreen: '#10B981',
+                        fakeRed: '#EF4444',
+                        verifyAmber: '#F59E0B'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-darkbg text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-primary selection:text-white">
+
+    <!-- Top Navigation Header -->
+    <header class="border-b border-surfaceBorder/80 bg-surface/70 backdrop-blur-xl sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+                    <i data-lucide="shield-check" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-primary bg-clip-text text-transparent">
+                        TruthLens AI
+                    </h1>
+                    <p class="text-xs text-slate-400">All-India Multi-Engine Fact Verification</p>
+                </div>
+            </div>
+
+            <!-- Header Badges -->
+            <div class="flex items-center space-x-4">
+                <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 border border-emerald-500/30 text-emerald-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                    60+ Verified Indian Publishers Active
+                </span>
+                <a href="/docs" target="_blank" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-surfaceBorder hover:border-primary/50 text-slate-300 hover:text-white transition flex items-center gap-1.5 bg-surface/40">
+                    <i data-lucide="code-2" class="w-4 h-4 text-primary"></i>
+                    <span>REST API</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+
+        <!-- Navigation Tabs Bar -->
+        <div class="flex overflow-x-auto no-scrollbar space-x-2 border-b border-surfaceBorder pb-3 mb-8">
+            <button onclick="switchTab('text-tab')" id="nav-text-tab" class="tab-btn active-tab flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+                <span>Text & Headline</span>
+            </button>
+            <button onclick="switchTab('voice-tab')" id="nav-voice-tab" class="tab-btn inactive-tab flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                <i data-lucide="mic" class="w-4 h-4"></i>
+                <span>Live Voice Input</span>
+            </button>
+            <button onclick="switchTab('ocr-tab')" id="nav-ocr-tab" class="tab-btn inactive-tab flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                <i data-lucide="image" class="w-4 h-4"></i>
+                <span>Image OCR</span>
+            </button>
+            <button onclick="switchTab('news-tab')" id="nav-news-tab" class="tab-btn inactive-tab flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                <i data-lucide="newspaper" class="w-4 h-4"></i>
+                <span>Live Newspapers</span>
+            </button>
+            <button onclick="switchTab('stats-tab')" id="nav-stats-tab" class="tab-btn inactive-tab flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm transition">
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                <span>Intelligence & History</span>
+            </button>
+        </div>
+
+        <!-- ════════ TAB 1: TEXT ANALYSIS ════════ -->
+        <section id="text-tab" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Left Input Column -->
+                <div class="lg:col-span-7 space-y-6">
+                    <div class="glass-panel p-6 rounded-2xl relative overflow-hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <label class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                                <i data-lucide="edit-3" class="w-4 h-4 text-primary"></i>
+                                Enter News Claim or Article Text
+                            </label>
+                            <span class="text-xs text-slate-400" id="char-count">0 characters</span>
+                        </div>
+
+                        <textarea id="news-input" rows="7" 
+                            placeholder="Paste breaking news headline, WhatsApp forward, or social media rumor in English, Telugu, Hindi, Tamil, etc..."
+                            class="w-full bg-darkbg/90 border border-surfaceBorder rounded-xl p-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-transparent transition resize-none text-sm"></textarea>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center justify-between mt-4">
+                            <button onclick="clearText()" class="text-xs text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-surfaceBorder/40">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear
+                            </button>
+                            <button onclick="analyzeText()" id="verify-btn" class="px-6 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-primary to-accent hover:opacity-95 shadow-lg shadow-primary/25 transition flex items-center gap-2">
+                                <i data-lucide="search" class="w-4 h-4"></i>
+                                <span>Verify Claim</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Sample Pills -->
+                    <div class="space-y-2">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Quick Test Examples:</span>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="loadSample(1)" class="sample-chip">
+                                🚨 Fake Conspiracy
+                            </button>
+                            <button onclick="loadSample(2)" class="sample-chip">
+                                📰 Real Reuters Wire
+                            </button>
+                            <button onclick="loadSample(3)" class="sample-chip">
+                                🇮🇳 Telugu Headline (Eenadu)
+                            </button>
+                            <button onclick="loadSample(4)" class="sample-chip">
+                                💬 WhatsApp Junk Forward
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Result Column -->
+                <div class="lg:col-span-5">
+                    <!-- Default Idle State -->
+                    <div id="idle-state" class="glass-panel p-8 rounded-2xl flex flex-col items-center justify-center text-center h-full min-h-[380px] border-dashed border-2 border-surfaceBorder">
+                        <div class="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center text-slate-400 mb-4 border border-surfaceBorder shadow-inner">
+                            <i data-lucide="radar" class="w-8 h-8 text-primary/70"></i>
+                        </div>
+                        <h3 class="text-base font-semibold text-slate-200">Awaiting Claim Input</h3>
+                        <p class="text-xs text-slate-400 max-w-xs mt-1.5">
+                            Submit any news headline above. TruthLens will cross-reference 60+ Indian media houses, run a 4-model ensemble, and evaluate emotional polarity.
+                        </p>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="loading-state" class="hidden glass-panel p-8 rounded-2xl flex flex-col items-center justify-center text-center h-full min-h-[380px]">
+                        <div class="relative w-16 h-16 mb-4">
+                            <div class="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <i data-lucide="cpu" class="w-6 h-6 text-primary"></i>
+                            </div>
+                        </div>
+                        <h3 class="text-base font-semibold text-slate-100" id="loading-stage">Cross-referencing live sources...</h3>
+                        <p class="text-xs text-slate-400 mt-1">Checking Google News RSS feeds, regional newspapers, and fact-checkers.</p>
+                    </div>
+
+                    <!-- Results Card Container (Populated via JS) -->
+                    <div id="result-container" class="hidden space-y-6"></div>
+                </div>
+            </div>
+
+            <!-- Deep Dive Analysis Grid (Populated on verification) -->
+            <div id="deep-dive-grid" class="hidden mt-8 grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+        </section>
+
+        <!-- ════════ TAB 2: LIVE VOICE INPUT ════════ -->
+        <section id="voice-tab" class="tab-content hidden">
+            <div class="max-w-3xl mx-auto space-y-6">
+                <div class="glass-panel p-8 rounded-2xl text-center space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">🎙️ Live Voice News Verification</h2>
+                        <p class="text-xs text-slate-400 mt-1">Speak in English, Hindi, Telugu, Tamil, Marathi, Bengali, and 4 other Indian languages.</p>
+                    </div>
+
+                    <!-- Language Selector -->
+                    <div class="inline-flex items-center gap-2 bg-darkbg border border-surfaceBorder px-4 py-2 rounded-xl text-sm">
+                        <span class="text-slate-400">Language:</span>
+                        <select id="voice-lang-select" class="bg-transparent text-slate-100 font-medium focus:outline-none">
+                            <option value="English">English (India)</option>
+                            <option value="Telugu">Telugu (తెలుగు)</option>
+                            <option value="Hindi">Hindi (हिंदी)</option>
+                            <option value="Tamil">Tamil (தமிழ்)</option>
+                            <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+                            <option value="Malayalam">Malayalam (മലയാളം)</option>
+                            <option value="Bengali">Bengali (বাংলা)</option>
+                            <option value="Marathi">Marathi (मराठी)</option>
+                            <option value="Gujarati">Gujarati (ગુજરાતી)</option>
+                        </select>
+                    </div>
+
+                    <!-- Microphone Button -->
+                    <div class="flex flex-col items-center justify-center py-6">
+                        <button id="mic-record-btn" onclick="toggleRecording()" 
+                            class="w-24 h-24 rounded-full bg-gradient-to-tr from-primary to-accent hover:scale-105 transition shadow-xl shadow-primary/30 flex items-center justify-center relative">
+                            <i data-lucide="mic" class="w-10 h-10 text-white" id="mic-icon"></i>
+                            <span id="record-ring" class="hidden absolute inset-0 rounded-full border-4 border-red-500 animate-ping"></span>
+                        </button>
+                        <p id="record-status" class="text-sm font-medium text-slate-300 mt-4">Click to Start Recording</p>
+                        <span id="record-timer" class="text-xs text-slate-400 hidden">00:00</span>
+                    </div>
+
+                    <!-- File Drop Fallback -->
+                    <div class="border-t border-surfaceBorder pt-6">
+                        <p class="text-xs text-slate-400 mb-3">Or upload a recorded WAV/MP3 audio file:</p>
+                        <input type="file" id="voice-file-input" accept="audio/*" class="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:opacity-90 cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Voice Result Container -->
+                <div id="voice-result-container" class="hidden space-y-6"></div>
+            </div>
+        </section>
+
+        <!-- ════════ TAB 3: IMAGE OCR ════════ -->
+        <section id="ocr-tab" class="tab-content hidden">
+            <div class="max-w-3xl mx-auto space-y-6">
+                <div class="glass-panel p-8 rounded-2xl text-center space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">🖼️ Newspaper Clipping & Screenshot OCR</h2>
+                        <p class="text-xs text-slate-400 mt-1">Upload photos or screenshots of newspapers, social media posts, or official notices.</p>
+                    </div>
+
+                    <div class="inline-flex items-center gap-2 bg-darkbg border border-surfaceBorder px-4 py-2 rounded-xl text-sm">
+                        <span class="text-slate-400">OCR Language:</span>
+                        <select id="ocr-lang-select" class="bg-transparent text-slate-100 font-medium focus:outline-none">
+                            <option value="English">English</option>
+                            <option value="Telugu">Telugu</option>
+                            <option value="Hindi">Hindi</option>
+                            <option value="Tamil">Tamil</option>
+                            <option value="Kannada">Kannada</option>
+                            <option value="Malayalam">Malayalam</option>
+                            <option value="Bengali">Bengali</option>
+                            <option value="Marathi">Marathi</option>
+                        </select>
+                    </div>
+
+                    <!-- Image Drop Area -->
+                    <div id="drop-zone" class="border-2 border-dashed border-surfaceBorder rounded-2xl p-8 hover:border-primary/60 transition cursor-pointer flex flex-col items-center justify-center">
+                        <i data-lucide="upload-cloud" class="w-12 h-12 text-primary/70 mb-3"></i>
+                        <p class="text-sm font-semibold text-slate-200">Drag & Drop news image here, or click to browse</p>
+                        <p class="text-xs text-slate-400 mt-1">Supports PNG, JPG, JPEG, BMP</p>
+                        <input type="file" id="ocr-file-input" accept="image/*" class="hidden">
+                    </div>
+
+                    <div id="image-preview-wrapper" class="hidden space-y-4">
+                        <img id="image-preview" src="" alt="Preview" class="max-h-72 mx-auto rounded-xl border border-surfaceBorder object-contain">
+                        <button onclick="processImageOCR()" id="ocr-run-btn" class="px-6 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-primary to-accent hover:opacity-95 shadow-lg shadow-primary/25 transition">
+                            Extract & Verify News
+                        </button>
+                    </div>
+                </div>
+
+                <!-- OCR Result Container -->
+                <div id="ocr-result-container" class="hidden space-y-6"></div>
+            </div>
+        </section>
+
+        <!-- ════════ TAB 4: NEWSPAPER SCANNER ════════ -->
+        <section id="news-tab" class="tab-content hidden">
+            <div class="space-y-6">
+                <div class="glass-panel p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">📰 Live Newspaper Front-Pages</h2>
+                        <p class="text-xs text-slate-400">Fetch and fact-check live front-page headlines directly from verified Indian publishers.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <select id="paper-select" class="bg-darkbg border border-surfaceBorder px-4 py-2 rounded-xl text-sm text-slate-100 focus:outline-none">
+                            <option value="the_hindu">The Hindu (English)</option>
+                            <option value="ndtv">NDTV (English)</option>
+                            <option value="eenadu">Eenadu (Telugu)</option>
+                            <option value="sakshi">Sakshi (Telugu)</option>
+                            <option value="dainik_jagran">Dainik Jagran (Hindi)</option>
+                            <option value="amar_ujala">Amar Ujala (Hindi)</option>
+                            <option value="dinamalar">Dinamalar (Tamil)</option>
+                            <option value="indian_express">Indian Express (English)</option>
+                            <option value="times_of_india">Times of India (English)</option>
+                        </select>
+                        <button onclick="fetchPaperHeadlines()" class="px-5 py-2 rounded-xl text-sm font-semibold bg-primary hover:bg-primary/90 text-white transition flex items-center gap-2">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>Scan Headlines</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="headlines-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════ TAB 5: INTELLIGENCE & HISTORY ════════ -->
+        <section id="stats-tab" class="tab-content hidden">
+            <div class="space-y-8">
+                <!-- Analytics Counters -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Scanned</span>
+                        <h3 class="text-2xl font-black text-white mt-2" id="stat-total">--</h3>
+                        <p class="text-xs text-slate-400 mt-1">Across all channels</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <span class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Verified Real</span>
+                        <h3 class="text-2xl font-black text-emerald-400 mt-2" id="stat-real">--</h3>
+                        <p class="text-xs text-slate-400 mt-1" id="stat-real-rate">--% rate</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <span class="text-xs font-semibold text-red-400 uppercase tracking-wider">Fake / Debunked</span>
+                        <h3 class="text-2xl font-black text-red-400 mt-2" id="stat-fake">--</h3>
+                        <p class="text-xs text-slate-400 mt-1" id="stat-fake-rate">--% rate</p>
+                    </div>
+                    <div class="glass-panel p-5 rounded-2xl">
+                        <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Unverified</span>
+                        <h3 class="text-2xl font-black text-amber-400 mt-2" id="stat-unverified">--</h3>
+                        <p class="text-xs text-slate-400 mt-1">Zero corroboration</p>
+                    </div>
+                </div>
+
+                <!-- History Table -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i data-lucide="history" class="w-5 h-5 text-primary"></i>
+                            Recent Verification Log
+                        </h3>
+                        <button onclick="loadHistory()" class="text-xs text-primary hover:underline flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Refresh
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-300">
+                            <thead class="text-xs uppercase bg-surface/80 text-slate-400 border-b border-surfaceBorder">
+                                <tr>
+                                    <th class="py-3 px-4">Verdict</th>
+                                    <th class="py-3 px-4">Headline / Text</th>
+                                    <th class="py-3 px-4">Confidence</th>
+                                    <th class="py-3 px-4">Source</th>
+                                    <th class="py-3 px-4">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body" class="divide-y divide-surfaceBorder">
+                                <tr><td colspan="5" class="py-6 text-center text-slate-500">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-surfaceBorder/80 bg-surface/50 text-center py-6 text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p>TruthLens AI &copy; 2026 — Advanced Real-Time Multi-Engine Verification</p>
+            <p class="flex items-center gap-2">
+                <span>FastAPI Async Engine</span> • 
+                <span>₹0 Cloud Cost</span> • 
+                <a href="/docs" class="text-primary hover:underline">Interactive OpenAPI Specs</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- App JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

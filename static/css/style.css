@@ -1,0 +1,126 @@
+/* Glassmorphism & Custom Aesthetics for TruthLens AI */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: #07090E;
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
+}
+
+code, pre {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Glass Panels */
+.glass-panel {
+    background: rgba(18, 23, 34, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(31, 41, 61, 0.7);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-panel-glow {
+    position: relative;
+}
+
+.glass-panel-glow::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px; bottom: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.1), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* Tab button styling */
+.active-tab {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818CF8;
+    border: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.inactive-tab {
+    color: #94A3B8;
+    border: 1px solid transparent;
+}
+
+.inactive-tab:hover {
+    color: #F8FAFC;
+    background: rgba(31, 41, 61, 0.4);
+}
+
+/* Sample chip buttons */
+.sample-chip {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    background: rgba(18, 23, 34, 0.9);
+    border: 1px solid rgba(31, 41, 61, 0.9);
+    color: #CBD5E1;
+    transition: all 0.2s;
+}
+
+.sample-chip:hover {
+    border-color: rgba(99, 102, 241, 0.6);
+    color: #FFFFFF;
+    transform: translateY(-1px);
+}
+
+/* Token Highlights */
+.token-alarm {
+    background: rgba(239, 68, 68, 0.2);
+    color: #FCA5A5;
+    border-bottom: 2px solid #EF4444;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.token-subjective {
+    background: rgba(245, 158, 11, 0.2);
+    color: #FCD34D;
+    border-bottom: 2px solid #F59E0B;
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.token-credible {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6EE7B7;
+    border-bottom: 2px solid #10B981;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.token-caps {
+    background: rgba(139, 92, 246, 0.2);
+    color: #C4B5FD;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0A0D14;
+}
+::-webkit-scrollbar-thumb {
+    background: #1F293D;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #374151;
+}

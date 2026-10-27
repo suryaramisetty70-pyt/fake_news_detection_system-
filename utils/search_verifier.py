@@ -225,16 +225,16 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
     
     import time
     
-    # Base delay of 1.5s to prevent IP rate-limiting from Google News RSS
-    time.sleep(1.5)
+    # Slight throttle delay to prevent IP rate-limiting from Google News RSS
+    time.sleep(0.3)
     
     # Log the query and destination URL
     print(f"\n[Verifier Log] Exact query sent to Google News RSS: '{query}'")
     print(f"[Verifier Log] Target Search URL: {search_url}")
     
     response = None
-    retries = 3  # Retry up to 3 times (4 total attempts)
-    backoff_delays = [1.0, 3.0, 5.0]
+    retries = 2  # Retry up to 2 times
+    backoff_delays = [0.5, 1.5]
     
     for attempt in range(retries + 1):
         if attempt > 0:
@@ -243,7 +243,7 @@ def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
             time.sleep(delay)
             
         try:
-            response = requests.get(search_url, headers=headers, timeout=8)
+            response = requests.get(search_url, headers=headers, timeout=5)
             print(f"[Verifier Log] HTTP Status Code received: {response.status_code}")
             response.raise_for_status()
             break
