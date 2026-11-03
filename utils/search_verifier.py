@@ -27,7 +27,8 @@ def print(*args, **kwargs):
 TRUSTED_DOMAINS = {
     # ─── Government & Official Fact Checkers (Highest Priority) ───
     'pib.gov.in', 'factcheck.pib.gov.in', 'gov.in', 'nic.in', 'altnews.in', 
-    'boomlive.in', 'factcrescendo.com', 'vishvasnews.com',
+    'boomlive.in', 'factcrescendo.com', 'vishvasnews.com', 'factcheck.org',
+    'factly.in', 'snopes.com', 'politifact.com', 'fullfact.org', 'thip.media',
     
     # ─── National Outlets (English & Hindi) ───
     'reuters.com', 'apnews.com', 'bbc.com', 'bbc.co.uk', 'nytimes.com', 

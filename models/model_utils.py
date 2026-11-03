@@ -149,6 +149,31 @@ def predict(text: str, use_transformer: bool = True) -> dict:
     lang_info = detect_language(cleaned_text)
     lang_code = lang_info.get('code', 'en')
     
+    # ─── FACT-CHECKING LAYER 1: Canonical Public Office & Dignitary Verification ───
+    # Catches false identity claims (e.g., 'PM Modi is CM of TN', 'Rahul Gandhi is PM of India')
+    from utils.fact_verifier import check_canonical_role_mismatch, analyze_headline_entailment
+    role_check = check_canonical_role_mismatch(cleaned_text)
+    if role_check:
+        return {
+            'label': 'FAKE',
+            'confidence': 0.99,
+            'message': role_check['explanation'],
+            'probabilities': {'FAKE': 0.99, 'REAL': 0.01},
+            'model_type': 'fact_check_contradiction',
+            'fact_check': role_check,
+            'web_check': {
+                'verified': False,
+                'trusted_sources_count': 0,
+                'total_results_count': 0,
+                'matches': [],
+                'error': role_check['explanation']
+            },
+            'social_context': social_context,
+            'linguistics': linguistics,
+            'ensemble': ensemble,
+            'language': lang_info
+        }
+    
     from utils.search_verifier import verify_claim_on_web
     web_check = verify_claim_on_web(cleaned_text, lang_code=lang_code)
     
@@ -172,16 +197,38 @@ def predict(text: str, use_transformer: bool = True) -> dict:
     
     # 3. Search returned results, evaluate verification
     if web_check.get('verified'):
-        # Check if any matches are on fact-checking domains (debunked)
+        # ─── FACT-CHECKING LAYER 2: Semantic Entailment vs. Interaction Contradiction ───
+        # Check if matched headlines report an interaction between two distinct entities
+        # (e.g. 'PM Modi meets CM Vijay') that directly contradicts an identity claim ('Modi is CM')
+        is_contra, contra_explanation = analyze_headline_entailment(cleaned_text, web_check.get('matches', []))
+        if is_contra:
+            return {
+                'label': 'FAKE',
+                'confidence': 0.95,
+                'message': contra_explanation,
+                'probabilities': {'FAKE': 0.95, 'REAL': 0.05},
+                'model_type': 'semantic_contradiction_check',
+                'web_check': web_check,
+                'social_context': social_context,
+                'linguistics': linguistics,
+                'ensemble': ensemble,
+                'language': lang_info
+            }
+            
+        # Check if any matches are on fact-checking domains or contain debunking keywords
         fact_checkers = {
             'pib.gov.in', 'factcheck.pib.gov.in', 'altnews.in', 
-            'boomlive.in', 'factcrescendo.com', 'vishvasnews.com'
+            'boomlive.in', 'factcrescendo.com', 'vishvasnews.com',
+            'factcheck.org', 'factly.in', 'snopes.com', 'politifact.com',
+            'fullfact.org', 'thip.media'
         }
         
         debunk_keywords = {
-            'fake', 'false', 'hoax', 'misleading', 'debunk', 'untrue',
+            'fake', 'false', 'hoax', 'misleading', 'debunk', 'debunked', 'untrue',
             'morphed', 'fabricated', 'fraud', 'scam', 'busted', 'rumour',
-            'rumor', 'fact check', 'fact-check', 'no truth'
+            'rumor', 'fact check', 'fact-check', 'no truth', 'will not cure',
+            'does not cure', 'cannot cure', 'not a cure', 'not cure', 'does not prevent',
+            'no evidence', 'myth', 'myths', 'no proof', 'unproven', 'no claim'
         }
         
         has_fact_check_debunk = False
@@ -190,23 +237,25 @@ def predict(text: str, use_transformer: bool = True) -> dict:
         for match in web_check.get('matches', []):
             domain = match.get('domain', '')
             match_title = match.get('title', '').lower()
-            if domain in fact_checkers or any(domain.endswith('.' + fc) for fc in fact_checkers):
-                # Check for debunk markers in fact-checker headline
-                if any(dk in match_title for dk in debunk_keywords) or 'fact' in domain:
-                    has_fact_check_debunk = True
-                    fact_check_match = match
-                    break
+            is_fc_domain = domain in fact_checkers or any(domain.endswith('.' + fc) for fc in fact_checkers) or 'fact' in domain
+            has_debunk_word = any(dk in match_title for dk in debunk_keywords)
+            
+            # If from a fact checker, OR if any trusted publisher explicitly debunks the claim in headline
+            if is_fc_domain or has_debunk_word:
+                has_fact_check_debunk = True
+                fact_check_match = match
+                break
                 
         if has_fact_check_debunk:
             label = 'FAKE'
-            confidence = 0.85
-            message = f"This claim was officially flagged as false/fake by fact-checking agency: {fact_check_match['domain']}"
+            confidence = 0.90
+            message = f"Officially debunked / flagged as false by {fact_check_match['domain']}: \"{fact_check_match['title']}\""
             return {
                 'label': label,
                 'confidence': confidence,
                 'message': message,
-                'probabilities': {'FAKE': 0.85, 'REAL': 0.15},
-                'model_type': 'search_verification',
+                'probabilities': {'FAKE': 0.90, 'REAL': 0.10},
+                'model_type': 'search_debunk_verification',
                 'web_check': web_check,
                 'social_context': social_context,
                 'linguistics': linguistics,
