@@ -157,10 +157,11 @@ function renderResults(data) {
 
     if (label === "REAL") {
         verdictColor = "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
-        badgeText = "✅ REPORTED BY TRUSTED SOURCES";
+        badgeText = data.model_type === "official_record"
+            ? "✅ CONFIRMED BY AN OFFICIAL RECORD" : "✅ REPORTED BY TRUSTED SOURCES";
     } else if (label === "FAKE") {
         verdictColor = "border-rose-500/40 bg-rose-500/10 text-rose-400";
-        badgeText = "❌ OFFICIALLY DEBUNKED / FAKE";
+        badgeText = "❌ CONTRADICTED BY SOURCE";
         descText = data.message || "This claim has been contradicted or flagged by official fact-checking agencies.";
     }
 
@@ -168,7 +169,7 @@ function renderResults(data) {
     if (webCheck.matches && webCheck.matches.length > 0) {
         matchesHtml = `
             <div class="mt-4 pt-4 border-t border-surfaceBorder space-y-2">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Source Headlines</span>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Source Evidence</span>
                 ${webCheck.matches.map(m => `
                     <div class="p-2.5 rounded-xl bg-darkbg/80 border border-surfaceBorder/80 flex items-start justify-between gap-3 text-xs">
                         <div>

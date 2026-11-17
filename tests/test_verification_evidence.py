@@ -51,3 +51,54 @@ class VerificationEvidenceTests(unittest.TestCase):
             result = verify_claim_on_web(self.claim)
         self.assertTrue(result["search_failed"])
         self.assertIsNone(result["verdict"])
+
+
+class ReviewerClaimTests(unittest.TestCase):
+    def test_private_home_claim_requires_identifiable_event(self):
+        for claim in (
+            "Modi is comming to his home",
+            "Modi is coming to my home tomorrow",
+            "Modi will visit her house",
+        ):
+            with self.subTest(claim=claim), patch("requests.get") as fetch:
+                result = verify_claim_on_web(claim)
+                self.assertIsNone(result["verdict"])
+                self.assertIn("private-home", result["message"])
+                fetch.assert_not_called()
+
+    def test_current_office_claim_uses_official_record(self):
+        from datetime import datetime, timezone
+
+        from utils.official_records import check_current_office
+
+        now = datetime(2026, 11, 17, tzinfo=timezone.utc)
+        with patch("utils.official_records._fetch_tamil_nadu_holder", return_value="C. Joseph Vijay"):
+            result = check_current_office("modi is the cm of tamil nadu", now)
+            self.assertEqual(result["verdict"], "FAKE")
+            self.assertEqual(result["matches"][0]["domain"], "tn.gov.in")
+            self.assertEqual(check_current_office("Vijay is the CM of Tamil Nadu", now)["verdict"], "REAL")
+            self.assertIsNone(check_current_office("Modi was the CM of Tamil Nadu", now))
+            self.assertIsNone(check_current_office("Modi is the CM of Tamil Nadu?", now))
+            self.assertIsNone(check_current_office("Modi is not the CM of Tamil Nadu", now))
+
+    def test_snapshot_expires_and_newer_live_record_takes_priority(self):
+        from datetime import datetime, timezone
+
+        from utils.official_records import check_current_office
+
+        claim = "Modi is the CM of Tamil Nadu"
+        with patch("utils.official_records._fetch_tamil_nadu_holder", return_value=None):
+            self.assertEqual(check_current_office(claim, datetime(2026, 11, 17, tzinfo=timezone.utc))["verdict"], "FAKE")
+            self.assertIsNone(check_current_office(claim, datetime(2027, 1, 1, tzinfo=timezone.utc)))
+        with patch("utils.official_records._fetch_tamil_nadu_holder", return_value="Narendra Modi"):
+            self.assertEqual(check_current_office(claim, datetime(2026, 11, 17, tzinfo=timezone.utc))["verdict"], "REAL")
+
+    def test_extracts_current_holder_from_official_page(self):
+        from utils.official_records import _fetch_tamil_nadu_holder
+
+        response = Mock(content=(
+            "<div><h2>Honorable Chief Minister</h2><img src='portrait.png'>"
+            "<h3>Thiru C. Joseph Vijay</h3><p>Chief Minister of Tamil Nadu</p></div>"
+        ))
+        with patch("requests.get", return_value=response):
+            self.assertEqual(_fetch_tamil_nadu_holder(0), "C. Joseph Vijay")
