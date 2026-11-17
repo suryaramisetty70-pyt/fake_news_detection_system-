@@ -84,15 +84,13 @@ def extract_text_from_image(image_input, language: str = 'English') -> dict:
         # Preprocess image for better OCR
         processed_image = preprocess_image(image)
         
-        # Extract text using Tesseract
-        # Try with the specified language, fall back to English
-        try:
-            text = pytesseract.image_to_string(processed_image, lang=lang_code)
-        except Exception:
-            # Fallback to English if language pack not available
-            text = pytesseract.image_to_string(processed_image, lang='eng')
-            language = 'English (fallback)'
-        
+        if lang_code not in pytesseract.get_languages():
+            return {
+                "success": False, "text": "",
+                "error": f"OCR for {language} is unavailable on this server.",
+            }
+        text = pytesseract.image_to_string(processed_image, lang=lang_code, timeout=12)
+
         text = text.strip()
         
         if not text:

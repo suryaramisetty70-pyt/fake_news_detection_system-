@@ -6,22 +6,7 @@ local, state-level, and national Indian news sources in all major languages.
 Cost: ₹0 (FREE, no API keys needed)
 """
 import re
-import sys
 from urllib.parse import urlparse
-
-# Safe print helper to prevent UnicodeEncodeError on Windows CP1252 consoles
-def print(*args, **kwargs):
-    import builtins
-    text = " ".join(str(arg) for arg in args)
-    try:
-        builtins.print(text, **kwargs)
-    except UnicodeEncodeError:
-        try:
-            encoding = sys.stdout.encoding or 'utf-8'
-            safe_text = text.encode(encoding, errors='replace').decode(encoding)
-            builtins.print(safe_text, **kwargs)
-        except Exception:
-            builtins.print(text.encode('ascii', errors='replace').decode('ascii'), **kwargs)
 
 # Trusted news sources domains spanning all Indian states and languages
 TRUSTED_DOMAINS = {
@@ -145,7 +130,6 @@ def _extract_search_query(text: str) -> str:
     if not query_words:
         query_words = words[:6]
         
-    print(f"[Verifier Log] Extracted 6 keywords for search: {query_words}")
     return ' '.join(query_words)
 
 
@@ -161,212 +145,102 @@ def _get_domain(url: str) -> str:
         return ""
 
 
-# Configurable keyword overlap threshold (default 35%)
-OVERLAP_THRESHOLD = 0.35
+FACT_CHECK_DOMAINS = {
+    "pib.gov.in", "altnews.in", "boomlive.in", "factcrescendo.com",
+    "vishvasnews.com", "factcheck.org", "factly.in", "snopes.com",
+    "politifact.com", "fullfact.org", "thip.media",
+}
 
 
-def verify_claim_on_web(text: str, lang_code: str = 'en') -> dict:
-    """Search Google News RSS feed to check if trusted news domains are reporting the same story.
-    
-    Includes 2-retry logic on fetch timeouts and a configurable title keyword overlap check.
-    
-    Returns:
-        dict: {
-            'verified': True/False,
-            'trusted_sources_count': int,
-            'total_results_count': int,
-            'search_failed': True/False,
-            'matches': list of dicts [{'title', 'url', 'domain'}],
-            'confidence': float (0.0 to 1.0)
-        }
-    """
+def _matches_domain(domain: str, domains: set) -> bool:
+    return any(domain == source or domain.endswith("." + source) for source in domains)
+
+
+def _normalize_claim(text: str) -> str:
+    # Keep negations, dates, decimal points and word order when comparing claims.
+    import unicodedata
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split()).rstrip(".!?।")
+
+
+def _source_stance(claim: str, title: str, domain: str) -> str:
+    if _matches_domain(domain, FACT_CHECK_DOMAINS):
+        checks = re.fullmatch(
+            r'(?:fact[ -]check:\s*)?["“](.+)["”]\s*[:–—-]\s*'
+            r'(false|fake|true)[.!]?',
+            title.strip(),
+            flags=re.IGNORECASE,
+        )
+        if checks and _normalize_claim(checks[1]) == claim:
+            return "REAL" if checks[2].lower() == "true" else "FAKE"
+        return "RELATED"
+    if _normalize_claim(title) == claim and not title.rstrip().endswith(("?", "？")):
+        return "REAL"
+    return "RELATED"
+
+
+def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
+    """Retrieve related headlines and classify only directly matching evidence."""
+    from xml.etree import ElementTree as ET
+
     import requests
-    import xml.etree.ElementTree as ET
-    from urllib.parse import urlparse
-    
+
+    result = {
+        "verified": False, "verdict": None, "trusted_sources_count": 0,
+        "total_results_count": 0, "search_failed": False, "matches": [],
+        "confidence": 0.0,
+    }
     query = _extract_search_query(text)
-    if not query or len(query.strip()) < 5:
-        return {
-            'verified': False,
-            'trusted_sources_count': 0,
-            'total_results_count': 0,
-            'search_failed': False,
-            'matches': [],
-            'confidence': 0.0,
-            'error': 'Text is too short to construct a valid search query.'
-        }
-    
-    matches = []
-    seen_domains = set()
-    total_results_count = 0
-    
-    # Map detected language code to regional Google News RSS parameters
-    lang_map = {
-        'hi': ('hi', 'IN:hi'),     # Hindi
-        'te': ('te', 'IN:te'),     # Telugu
-        'ta': ('ta', 'IN:ta'),     # Tamil
-        'ml': ('ml', 'IN:ml'),     # Malayalam
-        'kn': ('kn', 'IN:kn'),     # Kannada
-        'mr': ('mr', 'IN:mr'),     # Marathi
-        'bn': ('bn', 'IN:bn'),     # Bengali
-        'gu': ('gu', 'IN:gu'),     # Gujarati
-        'pa': ('pa', 'IN:pa'),     # Punjabi
-        'ur': ('ur', 'IN:ur'),     # Urdu
+    if len(query.strip()) < 5:
+        return result
+
+    regional = {"hi", "te", "ta", "ml", "kn", "mr", "bn", "gu", "pa", "ur"}
+    language = lang_code if lang_code in regional else "en"
+    params = {
+        "q": query, "hl": language if language != "en" else "en-IN",
+        "gl": "IN", "ceid": f"IN:{language}",
     }
-    hl, ceid = lang_map.get(lang_code, ('en-IN', 'IN:en'))
-    
-    # Google News RSS search URL
-    import urllib.parse
-    encoded_query = urllib.parse.quote_plus(query)
-    search_url = f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}&gl=IN&ceid={ceid}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    import time
-    
-    # Slight throttle delay to prevent IP rate-limiting from Google News RSS
-    time.sleep(0.3)
-    
-    # Log the query and destination URL
-    print(f"\n[Verifier Log] Exact query sent to Google News RSS: '{query}'")
-    print(f"[Verifier Log] Target Search URL: {search_url}")
-    
-    response = None
-    retries = 2  # Retry up to 2 times
-    backoff_delays = [0.5, 1.5]
-    
-    for attempt in range(retries + 1):
-        if attempt > 0:
-            delay = backoff_delays[attempt - 1]
-            print(f"[Verifier Log] Attempt {attempt + 1} - Sleeping {delay}s for backoff...")
-            time.sleep(delay)
-            
-        try:
-            response = requests.get(search_url, headers=headers, timeout=5)
-            print(f"[Verifier Log] HTTP Status Code received: {response.status_code}")
-            response.raise_for_status()
-            break
-        except Exception as e:
-            status_code = response.status_code if response is not None else "None/Timeout"
-            print(f"[Verifier Log] Fetch attempt {attempt + 1} failed (Status: {status_code}). Error: {e}")
-            if attempt == retries:
-                print(f"[Verifier Log] ALL retries failed. Returning UNABLE TO VERIFY state.")
-                return {
-                    'verified': False,
-                    'trusted_sources_count': 0,
-                    'total_results_count': 0,
-                    'search_failed': True,
-                    'matches': [],
-                    'confidence': 0.0,
-                    'error': f'Failed to query Google News RSS after {retries+1} attempts: {str(e)}'
-                }
-                
     try:
-        # Check for empty response content
-        if not response or not response.content:
-            print("[Verifier Log] Empty XML response returned by Google News RSS.")
-            return {
-                'verified': False,
-                'trusted_sources_count': 0,
-                'total_results_count': 0,
-                'search_failed': True,
-                'matches': [],
-                'confidence': 0.0,
-                'error': 'Empty XML response received.'
-            }
-            
-        root = ET.fromstring(response.content)
-        items = root.findall('.//item')
-        total_results_count = len(items)
-        print(f"[Verifier Log] Number of Google News RSS results parsed: {total_results_count}")
-        
-        for item in items:
-            title = item.find('title').text if item.find('title') is not None else ""
-            link = item.find('link').text if item.find('link') is not None else ""
-            
-            source_elem = item.find('source')
-            source_url = ""
-            if source_elem is not None:
-                source_url = source_elem.attrib.get('url', '')
-                
-            if not source_url:
-                source_url = link
-                
-            domain = _get_domain(source_url)
-            
-            # Check if domain is trusted
-            is_trusted = False
-            for trusted in TRUSTED_DOMAINS:
-                if domain == trusted or domain.endswith('.' + trusted):
-                    is_trusted = True
-                    break
-            
-            # Calculate title keyword overlap using GLOBAL_STOPWORDS
-            query_clean = _clean_punctuation(query)
-            query_words = {w.lower() for w in query_clean.split() if w.lower() not in GLOBAL_STOPWORDS}
-            query_stems = {_stem_word(w) for w in query_words}
-            
-            # Google News titles usually append the source name at the end (e.g., "- Reuters")
-            # Strip this to calculate overlap purely on the headline text
-            title_clean = title
-            if " - " in title:
-                title_clean = title.rsplit(" - ", 1)[0]
-                
-            title_clean = _clean_punctuation(title_clean)
-            title_words = {w.lower() for w in title_clean.split() if w.lower() not in GLOBAL_STOPWORDS}
-            title_stems = {_stem_word(w) for w in title_words}
-            
-            overlap = query_stems.intersection(title_stems)
-            overlap_ratio = len(overlap) / max(len(query_stems), 1)
-            
-            # Log matching details for tuning (side-by-side comparison)
-            print(f"[Verifier Log] Title: '{title}' | Domain: {domain}")
-            print(f"               Query Keywords (Stemmed): {list(query_stems)}")
-            print(f"               Article Keywords (Stemmed): {list(title_stems)}")
-            print(f"               Matched Stems: {list(overlap)} | Overlap Ratio: {overlap_ratio:.1%} | Trusted: {is_trusted}")
-            
-            # Only accept match if domain is trusted AND keyword overlap is at least OVERLAP_THRESHOLD
-            if is_trusted and overlap_ratio >= OVERLAP_THRESHOLD and domain not in seen_domains:
-                seen_domains.add(domain)
-                # Link directly to Google News redirect link so user reaches the full story
-                article_url = link if link and link.startswith('http') else source_url
-                matches.append({
-                    'title': title,
-                    'url': article_url,
-                    'domain': domain,
-                    'snippet': f"Reported by {domain}. Article title: '{title}'"
-                })
-                
-    except Exception as e:
-        print(f"Error parsing Google News RSS XML: {e}")
-        return {
-            'verified': False,
-            'trusted_sources_count': 0,
-            'total_results_count': 0,
-            'search_failed': True,
-            'matches': [],
-            'confidence': 0.0,
-            'error': f'XML parsing failure: {str(e)}'
-        }
-        
-    sources_count = len(matches)
-    if sources_count >= 2:
-        verified = True
-        confidence = 0.99
-    elif sources_count == 1:
-        verified = True
-        confidence = 0.85
-    else:
-        verified = False
-        confidence = 0.0
-        
-    return {
-        'verified': verified,
-        'trusted_sources_count': sources_count,
-        'total_results_count': total_results_count,
-        'search_failed': False,
-        'matches': matches,
-        'confidence': confidence
-    }
+        response = requests.get(
+            "https://news.google.com/rss/search", params=params, timeout=(3, 6),
+        )
+        response.raise_for_status()
+        items = ET.fromstring(response.content).findall("./channel/item")
+    except (requests.RequestException, ET.ParseError):
+        result["search_failed"] = True
+        return result
+
+    claim = _normalize_claim(text)
+    query_stems = {_stem_word(word) for word in query.split()}
+    matches = {}
+    result["total_results_count"] = len(items)
+    for item in items:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        source = item.find("source")
+        domain = _get_domain(source.get("url", "") if source is not None else "")
+        if not title or not link.startswith(("https://", "http://")):
+            continue
+        if not _matches_domain(domain, TRUSTED_DOMAINS):
+            continue
+
+        suffix = f" - {(source.text or '').strip()}"
+        headline = title.removesuffix(suffix).strip()
+        stance = _source_stance(claim, headline, domain)
+        title_stems = {_stem_word(word) for word in _clean_punctuation(headline).split()}
+        if stance == "RELATED" and len(query_stems & title_stems) / len(query_stems) < 0.35:
+            continue
+        matches.setdefault((domain, stance), {
+            "title": title, "url": link, "domain": domain, "stance": stance,
+        })
+
+    direct = [match for match in matches.values() if match["stance"] != "RELATED"]
+    stances = {match["stance"] for match in direct}
+    verdict = next(iter(stances)) if len(stances) == 1 else None
+    result.update(
+        verified=verdict == "REAL",
+        verdict=verdict,
+        trusted_sources_count=len({match["domain"] for match in direct}) if verdict else 0,
+        matches=(direct + [match for match in matches.values() if match["stance"] == "RELATED"])[:8],
+        confidence=0.0,
+    )
+    return result

@@ -1,3 +1,18 @@
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[char]);
+}
+
+function safeSourceUrl(value) {
+    try {
+        const url = new URL(value);
+        return ["http:", "https:"].includes(url.protocol) ? escapeHtml(url.href) : "#";
+    } catch {
+        return "#";
+    }
+}
+
 /**
  * TruthLens AI — Interactive Client-Side Engine
  * Handles real-time verification, Web Audio API, OCR, Newspaper Reader & Dynamic UI
@@ -49,6 +64,7 @@ function initCharCounter() {
 }
 
 function clearText() {
+    activeVerification?.abort();
     const input = document.getElementById("news-input");
     if (input) {
         input.value = "";
@@ -77,13 +93,19 @@ function loadSample(id) {
 }
 
 // ─── Main Verification Call ───
+let activeVerification;
+
 async function analyzeText() {
     const input = document.getElementById("news-input");
     const text = input ? input.value.trim() : "";
-    if (!text || text.length < 5) {
-        alert("Please enter at least 5 characters to analyze.");
+    if (!text || text.length < 8) {
+        alert("Please enter at least 8 characters to analyze.");
         return;
     }
+
+    activeVerification?.abort();
+    const verification = new AbortController();
+    activeVerification = verification;
 
     // Toggle loading UI
     document.getElementById("idle-state").classList.add("hidden");
@@ -94,6 +116,7 @@ async function analyzeText() {
     try {
         const response = await fetch("/api/verify", {
             method: "POST",
+            signal: AbortSignal.any([verification.signal, AbortSignal.timeout(25000)]),
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, source: "text_input" })
         });
@@ -104,13 +127,19 @@ async function analyzeText() {
         }
 
         const data = await response.json();
-        renderResults(data);
-        renderDeepDive(data);
+        if (activeVerification === verification) {
+            renderResults(data);
+            renderDeepDive(data);
+        }
     } catch (err) {
-        alert(`Error: ${err.message}`);
+        if (verification.signal.aborted) return;
+        alert(err.name === "TimeoutError" ? "Verification timed out. Please try again." : `Error: ${err.message}`);
         document.getElementById("idle-state").classList.remove("hidden");
     } finally {
-        document.getElementById("loading-state").classList.add("hidden");
+        if (activeVerification === verification) {
+            activeVerification = undefined;
+            document.getElementById("loading-state").classList.add("hidden");
+        }
     }
 }
 
@@ -120,9 +149,7 @@ function renderResults(data) {
     container.classList.remove("hidden");
 
     const label = data.label || "UNABLE TO VERIFY";
-    const confidence = Math.round((data.confidence || 0) * 100);
     const webCheck = data.web_check || {};
-    const sourcesCount = webCheck.trusted_sources_count || 0;
 
     let verdictColor = "border-amber-500/40 bg-amber-500/10 text-amber-400";
     let badgeText = "⚠️ UNABLE TO VERIFY";
@@ -130,10 +157,7 @@ function renderResults(data) {
 
     if (label === "REAL") {
         verdictColor = "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
-        badgeText = "✅ VERIFIED REAL NEWS";
-        descText = `Corroborated by ${sourcesCount} trusted media agencies across India.`;
-        // Confetti celebration
-        confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+        badgeText = "✅ REPORTED BY TRUSTED SOURCES";
     } else if (label === "FAKE") {
         verdictColor = "border-rose-500/40 bg-rose-500/10 text-rose-400";
         badgeText = "❌ OFFICIALLY DEBUNKED / FAKE";
@@ -144,17 +168,17 @@ function renderResults(data) {
     if (webCheck.matches && webCheck.matches.length > 0) {
         matchesHtml = `
             <div class="mt-4 pt-4 border-t border-surfaceBorder space-y-2">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Trusted Publisher Matches:</span>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Source Headlines</span>
                 ${webCheck.matches.map(m => `
                     <div class="p-2.5 rounded-xl bg-darkbg/80 border border-surfaceBorder/80 flex items-start justify-between gap-3 text-xs">
                         <div>
-                            <a href="${m.url}" target="_blank" class="font-semibold text-indigo-400 hover:underline">
-                                ${m.title}
+                            <a href="${safeSourceUrl(m.url)}" target="_blank" rel="noopener noreferrer" class="font-semibold text-indigo-400 hover:underline">
+                                ${escapeHtml(m.title)}
                             </a>
-                            <p class="text-slate-400 text-[11px] mt-0.5">Publisher Domain: <span class="text-slate-300 font-mono">${m.domain}</span></p>
+                            <p class="text-slate-400 text-[11px] mt-0.5">Publisher Domain: <span class="text-slate-300 font-mono">${escapeHtml(m.domain)}</span></p>
                         </div>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 border border-emerald-500/30 text-emerald-400 shrink-0">
-                            VERIFIED
+                            ${({ REAL: "SUPPORTS", FAKE: "DEBUNKS" })[m.stance] || "RELATED"}
                         </span>
                     </div>
                 `).join("")}
@@ -168,12 +192,9 @@ function renderResults(data) {
                 <span class="px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase ${verdictColor}">
                     ${badgeText}
                 </span>
-                <span class="text-xs font-semibold text-slate-400 font-mono">
-                    Confidence: <strong class="text-white">${confidence}%</strong>
-                </span>
             </div>
 
-            <p class="text-sm text-slate-200 leading-relaxed">${descText}</p>
+            <p class="text-sm text-slate-200 leading-relaxed">${escapeHtml(descText)}</p>
 
             ${data.cached ? `<div class="text-[11px] text-indigo-400 flex items-center gap-1">⚡ Loaded instantaneously from local SQLite verification cache</div>` : ""}
 
@@ -200,13 +221,14 @@ function renderDeepDive(data) {
             <div class="flex items-center justify-between">
                 <h4 class="text-sm font-bold text-white flex items-center gap-2">
                     <i data-lucide="layers" class="w-4 h-4 text-primary"></i>
-                    4-Model Voting Ensemble
+                    Writing-Style Signals
                 </h4>
                 <span class="text-xs font-semibold px-2 py-0.5 rounded bg-surface border border-surfaceBorder text-slate-300">
-                    Ensemble: ${ensemble.ensemble_label || "N/A"}
+                    For context only
                 </span>
             </div>
 
+            <p class="text-xs text-slate-400">These scores describe writing patterns. See the source verdict above for the fact-check.</p>
             <div class="space-y-2.5 text-xs">
                 ${Object.entries(votes).map(([model, v]) => `
                     <div class="p-2.5 rounded-xl bg-darkbg border border-surfaceBorder flex items-center justify-between">
@@ -311,7 +333,10 @@ async function toggleRecording() {
             audioChunks = [];
 
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.onstop = sendVoiceData;
+            mediaRecorder.onstop = () => {
+                stream.getTracks().forEach(track => track.stop());
+                sendVoiceData(mediaRecorder.mimeType);
+            };
 
             mediaRecorder.start();
             isRecording = true;
@@ -330,12 +355,12 @@ async function toggleRecording() {
     }
 }
 
-async function sendVoiceData() {
-    const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+async function sendVoiceData(mimeType) {
+    const audioBlob = new Blob(audioChunks, { type: mimeType });
     const lang = document.getElementById("voice-lang-select").value;
 
     const formData = new FormData();
-    formData.append("file", audioBlob, "voice_input.wav");
+    formData.append("file", audioBlob, "voice_input");
     formData.append("language", lang);
 
     const status = document.getElementById("record-status");
@@ -347,7 +372,7 @@ async function sendVoiceData() {
             body: formData
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Voice verification failed");
+        if (!response.ok) throw new Error(data.error || data.detail || "Voice verification failed");
 
         status.textContent = "Click to Start Recording";
         // Show transcription in text tab and switch
@@ -451,29 +476,33 @@ async function fetchPaperHeadlines() {
         grid.innerHTML = data.headlines.map(h => `
             <div class="glass-panel p-5 rounded-2xl flex flex-col justify-between hover:border-primary/50 transition group">
                 <div>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${h.newspaper}</span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${escapeHtml(h.newspaper)}</span>
                     <h4 class="text-sm font-semibold text-slate-100 group-hover:text-primary transition mt-1.5 leading-snug">
-                        ${h.title}
+                        ${escapeHtml(h.title)}
                     </h4>
                 </div>
                 <div class="mt-4 pt-3 border-t border-surfaceBorder flex items-center justify-between text-xs">
-                    <a href="${h.url}" target="_blank" class="text-indigo-400 hover:underline">Read Source</a>
-                    <button onclick="checkHeadline('${encodeURIComponent(h.title)}')" class="px-3 py-1 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white transition font-medium">
+                    <a href="${safeSourceUrl(h.url)}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline">Read Source</a>
+                    <button data-claim="${escapeHtml(h.title)}" class="px-3 py-1 rounded-lg bg-primary/20 hover:bg-primary text-primary hover:text-white transition font-medium">
                         Fact-Check
                     </button>
                 </div>
             </div>
         `).join("");
+        const buttons = grid.querySelectorAll("[data-claim]");
+        buttons.forEach(button => {
+            button.addEventListener("click", () => checkHeadline(button.dataset.claim));
+        });
     } catch (err) {
-        grid.innerHTML = `<div class="col-span-full py-12 text-center text-rose-400">Failed to fetch newspaper headlines: ${err.message}</div>`;
+        grid.innerHTML = `<div class="col-span-full py-12 text-center text-rose-400">Failed to fetch newspaper headlines: ${escapeHtml(err.message)}</div>`;
     }
 }
 
-function checkHeadline(encodedTitle) {
-    const title = decodeURIComponent(encodedTitle);
+function checkHeadline(title) {
     const input = document.getElementById("news-input");
     if (input) {
         input.value = title;
+        input.dispatchEvent(new Event("input"));
         switchTab("text-tab");
         analyzeText();
     }
@@ -486,13 +515,13 @@ async function loadAnalytics() {
         if (!res.ok) return;
         const data = await res.json();
 
-        document.getElementById("stat-total").textContent = data.total_predictions || 0;
-        document.getElementById("stat-real").textContent = data.real_count || 0;
-        document.getElementById("stat-fake").textContent = data.fake_count || 0;
-        document.getElementById("stat-unverified").textContent = (data.total_predictions || 0) - ((data.real_count || 0) + (data.fake_count || 0));
+        document.getElementById("stat-total").textContent = data.total || 0;
+        document.getElementById("stat-real").textContent = data.real || 0;
+        document.getElementById("stat-fake").textContent = data.fake || 0;
+        document.getElementById("stat-unverified").textContent = (data.total || 0) - ((data.real || 0) + (data.fake || 0));
 
-        const realRate = data.total_predictions ? Math.round((data.real_count / data.total_predictions) * 100) : 0;
-        const fakeRate = data.total_predictions ? Math.round((data.fake_count / data.total_predictions) * 100) : 0;
+        const realRate = data.total ? Math.round((data.real / data.total) * 100) : 0;
+        const fakeRate = data.total ? Math.round((data.fake / data.total) * 100) : 0;
 
         document.getElementById("stat-real-rate").textContent = `${realRate}% rate`;
         document.getElementById("stat-fake-rate").textContent = `${fakeRate}% rate`;
@@ -522,13 +551,13 @@ async function loadHistory() {
                 <tr class="hover:bg-surface/60 transition">
                     <td class="py-3 px-4">
                         <span class="px-2 py-0.5 rounded text-[11px] font-bold ${badge}">
-                            ${row.prediction_label}
+                            ${escapeHtml(row.prediction_label)}
                         </span>
                     </td>
-                    <td class="py-3 px-4 max-w-xs truncate text-slate-200">${row.text_preview}</td>
-                    <td class="py-3 px-4 font-mono">${Math.round(row.confidence * 100)}%</td>
-                    <td class="py-3 px-4 capitalize text-slate-400">${row.source.replace("_", " ")}</td>
-                    <td class="py-3 px-4 text-slate-500 text-xs">${row.analyzed_at || "Recent"}</td>
+                    <td class="py-3 px-4 max-w-xs truncate text-slate-200">${escapeHtml(row.text_preview)}</td>
+                    <td class="py-3 px-4 font-mono">${row.confidence ? Math.round(row.confidence * 100) + "%" : "—"}</td>
+                    <td class="py-3 px-4 capitalize text-slate-400">${escapeHtml((row.source || "").replaceAll("_", " "))}</td>
+                    <td class="py-3 px-4 text-slate-500 text-xs">${escapeHtml(row.analyzed_at || "Recent")}</td>
                 </tr>
             `;
         }).join("");

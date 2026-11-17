@@ -26,16 +26,17 @@ from scrapers.newspaper_scraper import scrape_headlines, scrape_article
 from scrapers.scraper_config import NEWSPAPER_SOURCES, get_newspaper_names, get_available_languages, get_newspapers_by_language
 from database.db_handler import (
     save_prediction,
-    get_cached_prediction,
     get_analysis_history,
     get_statistics,
     save_scraped_headlines
 )
 
+API_VERSION = "2.0.1"
+
 app = FastAPI(
     title="🔍 All-India Fake News Detection & Real-Time Verification API",
     description="Full-stack AI & Live Search verification engine for Indian and global news.",
-    version="2.0.0"
+    version=API_VERSION
 )
 
 # Enable CORS for external frontend or extension integration
@@ -75,26 +76,17 @@ async def health_check():
     return {
         "status": "operational",
         "service": "fake_news_detector_api",
-        "version": "2.0.0",
+        "version": API_VERSION,
         "trusted_domains_count": len(TRUSTED_DOMAINS)
     }
 
 
 @app.post("/api/verify")
 def api_verify_text(payload: VerifyRequest):
-    text = payload.text.strip()
-    if not text or len(text) < 5:
-        raise HTTPException(status_code=400, detail="Please provide at least 5 characters for analysis.")
-        
-    cleaned = clean_text(text)
+    cleaned = clean_text(payload.text)
+    if len(clean_forwarded_text(cleaned).strip()) < 8:
+        raise HTTPException(status_code=400, detail="Please provide a claim of at least 8 characters.")
     
-    # 1. Check cache first
-    cached = get_cached_prediction(cleaned)
-    if cached:
-        cached["cached"] = True
-        return cached
-        
-    # 2. Run prediction pipeline
     result = predict(cleaned)
     
     # 3. Store result to SQLite
@@ -119,7 +111,9 @@ def api_voice_verify(
 ):
     try:
         from utils.speech_to_text import convert_audio_to_text
-        audio_bytes = file.file.read()
+        audio_bytes = file.file.read(10 * 1024 * 1024 + 1)
+        if len(audio_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Audio recordings must be 10 MB or smaller.")
         
         stt_result = convert_audio_to_text(audio_bytes, language=language)
         if not stt_result.get("success"):
@@ -142,8 +136,10 @@ def api_voice_verify(
             language=language
         )
         return {"success": True, "transcription": transcribed_text, "prediction": prediction}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Voice processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Voice processing failed.") from e
 
 
 @app.post("/api/ocr-verify")
