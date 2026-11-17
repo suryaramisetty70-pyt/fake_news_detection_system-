@@ -3,6 +3,7 @@ Speech-to-Text Module for Fake News Detection System
 Converts voice input to text using free speech recognition.
 """
 import io
+import subprocess
 import speech_recognition as sr
 
 
@@ -31,16 +32,28 @@ def convert_audio_to_text(audio_bytes: bytes, language: str = 'English') -> dict
         dict: {'success': True/False, 'text': '...', 'error': '...'}
     """
     recognizer = sr.Recognizer()
+    recognizer.operation_timeout = 10
     lang_code = SPEECH_LANGUAGES.get(language, 'en-IN')
     
     try:
-        # Convert bytes to AudioData
-        audio_file = io.BytesIO(audio_bytes)
-        with sr.AudioFile(audio_file) as source:
-            # Adjust for ambient noise
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            audio_data = recognizer.record(source)
-        
+        try:
+            audio_file = sr.AudioFile(io.BytesIO(audio_bytes))
+            with audio_file as source:
+                audio_data = recognizer.record(source)
+        except (ValueError, EOFError):
+            # Browsers typically record WebM/Opus or MP4/AAC.
+            from imageio_ffmpeg import get_ffmpeg_exe
+
+            converted = subprocess.run(
+                [get_ffmpeg_exe(), "-nostdin", "-loglevel", "error",
+                 "-i", "pipe:0", "-t", "120", "-ac", "1", "-ar", "16000",
+                 "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"],
+                input=audio_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                check=True, timeout=15,
+            )
+            with sr.AudioFile(io.BytesIO(converted.stdout)) as source:
+                audio_data = recognizer.record(source)
+
         # Use Google's free speech recognition
         text = recognizer.recognize_google(audio_data, language=lang_code)
         
@@ -51,6 +64,8 @@ def convert_audio_to_text(audio_bytes: bytes, language: str = 'English') -> dict
             'error': None
         }
     
+    except (subprocess.SubprocessError, ValueError, EOFError):
+        return {"success": False, "text": "", "error": "Could not decode this audio recording."}
     except sr.UnknownValueError:
         return {
             'success': False,

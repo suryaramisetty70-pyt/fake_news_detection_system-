@@ -2,12 +2,13 @@ fastapi
 uvicorn
 python-multipart
 streamlit
-scikit-learn
+scikit-learn==1.9.0
 beautifulsoup4
 requests
 Pillow
 pytesseract
 SpeechRecognition
+imageio-ffmpeg
 langdetect
 lime
 wordcloud
