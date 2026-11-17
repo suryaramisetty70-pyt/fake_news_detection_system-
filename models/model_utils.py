@@ -153,7 +153,9 @@ def predict(text: str, use_transformer: bool = True) -> dict:
     web_check = verify_claim_on_web(cleaned_text, lang_code=lang_code)
     verdict = web_check.get("verdict")
     confidence = web_check.get("confidence", 0.0)
-    if verdict == "FAKE":
+    if web_check.get("message"):
+        message = web_check["message"]
+    elif verdict == "FAKE":
         message = "A fact-checking source explicitly rated this claim false."
     elif verdict == "REAL":
         message = "Trusted publishers reported a headline matching this claim."
@@ -169,7 +171,7 @@ def predict(text: str, use_transformer: bool = True) -> dict:
             "FAKE": confidence if verdict == "FAKE" else 0.0,
             "REAL": confidence if verdict == "REAL" else 0.0,
         },
-        "model_type": "search_verification",
+        "model_type": web_check.get("method", "search_verification"),
         "web_check": web_check,
         "social_context": social_context,
         "linguistics": linguistics,

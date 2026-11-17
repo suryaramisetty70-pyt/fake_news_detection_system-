@@ -180,7 +180,10 @@ def _source_stance(claim: str, title: str, domain: str) -> str:
 
 def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
     """Retrieve related headlines and classify only directly matching evidence."""
+    from datetime import datetime, timezone
     from xml.etree import ElementTree as ET
+
+    from utils.official_records import check_current_office
 
     import requests
 
@@ -189,6 +192,15 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
         "total_results_count": 0, "search_failed": False, "matches": [],
         "confidence": 0.0,
     }
+    if re.search(r"\b(?:my|your|his|her|our|their)\s+(?:own\s+)?(?:home|house|residence)\b", text, re.IGNORECASE):
+        return {
+            **result,
+            "message": "A private-home claim needs a specific person, place, date and a public source. The details provided are insufficient.",
+        }
+    office = check_current_office(text, now=datetime.now(timezone.utc))
+    if office:
+        return office
+
     query = _extract_search_query(text)
     if len(query.strip()) < 5:
         return result
@@ -210,6 +222,7 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
         return result
 
     claim = _normalize_claim(text)
+    claim_is_question = text.rstrip().endswith(("?", "？"))
     query_stems = {_stem_word(word) for word in query.split()}
     matches = {}
     result["total_results_count"] = len(items)
@@ -225,7 +238,7 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
 
         suffix = f" - {(source.text or '').strip()}"
         headline = title.removesuffix(suffix).strip()
-        stance = _source_stance(claim, headline, domain)
+        stance = "RELATED" if claim_is_question else _source_stance(claim, headline, domain)
         title_stems = {_stem_word(word) for word in _clean_punctuation(headline).split()}
         if stance == "RELATED" and len(query_stems & title_stems) / len(query_stems) < 0.35:
             continue

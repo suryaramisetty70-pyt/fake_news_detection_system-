@@ -31,7 +31,7 @@ from database.db_handler import (
     save_scraped_headlines
 )
 
-API_VERSION = "2.0.1"
+API_VERSION = "2.0.2"
 
 app = FastAPI(
     title="🔍 All-India Fake News Detection & Real-Time Verification API",
