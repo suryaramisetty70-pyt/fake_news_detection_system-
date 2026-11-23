@@ -11,6 +11,7 @@ AI-powered multilingual fake news detection with:
 All tools are 100% FREE | Built with Streamlit + DistilBERT
 """
 import streamlit as st
+import math
 import sys
 import os
 from pathlib import Path
@@ -39,7 +40,6 @@ from scrapers.scraper_config import (
 )
 from database.db_handler import (
     save_prediction,
-    get_cached_prediction,
     get_analysis_history,
     get_statistics,
     get_db_info,
@@ -224,6 +224,16 @@ st.markdown("""
 
 
 # ─── SIDEBAR ───
+def format_confidence(value):
+    if value is None or not math.isfinite(value):
+        return "—"
+    return f"{value:.1%}"
+
+
+def verdict_icon(label):
+    return {"REAL": "✅", "FAKE": "❌"}.get(label, "⚪")
+
+
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
     
@@ -312,10 +322,10 @@ with st.sidebar:
         if history:
             for item in history:
                 label = item['prediction_label']
-                emoji = "❌" if label == "FAKE" else "✅"
-                conf = item.get('confidence', 0)
+                emoji = verdict_icon(label)
+                conf = item.get('confidence')
                 preview = item.get('text_preview', '')[:80]
-                st.markdown(f"{emoji} **{label}** ({conf:.0%}) — {preview}...")
+                st.markdown(f"{emoji} **{label}** ({format_confidence(conf)}) — {preview}...")
         else:
             st.caption("No analysis history yet. Start analyzing news!")
 
@@ -325,7 +335,7 @@ with st.sidebar:
 def display_results(text: str, prediction: dict, source: str = "text_input"):
     """Display prediction results with visualizations."""
     label = prediction.get('label', 'UNKNOWN')
-    confidence = prediction.get('confidence', 0)
+    confidence = prediction.get('confidence')
     model_type = prediction.get('model_type', 'unknown')
     web_check = prediction.get('web_check', {})
     
@@ -340,12 +350,12 @@ def display_results(text: str, prediction: dict, source: str = "text_input"):
         card_class = 'result-fake'
         verdict_class = 'verdict-fake'
         verdict_emoji = '❌'
-        verdict_title = 'UNVERIFIED / SUSPICIOUS'
-    elif label == 'UNABLE TO VERIFY':
+        verdict_title = 'CONTRADICTED BY SOURCE'
+    elif label != 'REAL':
         card_class = 'result-unknown'
         verdict_class = 'verdict-unknown'
         verdict_emoji = '⚠️'
-        verdict_title = 'UNABLE TO VERIFY'
+        verdict_title = 'MATCHING PUBLISHED HEADLINE' if label == 'REPORTED' else 'UNABLE TO VERIFY'
     else:
         card_class = 'result-real'
         verdict_class = 'verdict-real'
@@ -359,7 +369,7 @@ def display_results(text: str, prediction: dict, source: str = "text_input"):
         </div>
         <div style="text-align: center;">
             <span style="font-size: 1.2rem; color: rgba(255,255,255,0.8);">
-                Verification Confidence: <strong>{confidence:.1%}</strong>
+                Verification Confidence: <strong>{format_confidence(confidence)}</strong>
             </span>
             <span style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin-left: 1rem;">
                 Method: {model_type} | Language: {lang_info['name']}
@@ -373,33 +383,13 @@ def display_results(text: str, prediction: dict, source: str = "text_input"):
     
     with col1:
         # Show Web Search verification widget
-        st.markdown("#### 🌐 Google / MSN Web Search Verification")
-        if web_check.get('matches'):
-            st.success(
-                f"Found this story reported by **{web_check['trusted_sources_count']}** trusted news agencies!"
-            )
-            for match in web_check['matches']:
-                st.markdown(f"""
-                <div style="background: #1A1F2E; padding: 0.8rem; border-radius: 8px; margin: 0.4rem 0; border-left: 3px solid #00CC66;">
-                    <strong><a href="{match['url']}" target="_blank" style="color: #667eea; text-decoration: none;">{match['title']}</a></strong>
-                    <br><span style="font-size: 0.8rem; color: #888;">Domain: {match['domain']}</span>
-                    <br><span style="font-size: 0.85rem;">{match['snippet']}</span>
-                </div>
-                """, unsafe_allow_html=True)
-        elif label == 'UNABLE TO VERIFY':
-            st.warning(prediction.get('message', "We couldn't find matching sources. This doesn't confirm the news is fake — try rephrasing or check manually."))
-            st.info(
-                "💡 **How is this decided?** Google News RSS returned zero matches for this query. "
-                "This does NOT mean the story is fake. The search query might be too specific or obscure. "
-                "Try rephrasing or check major news outlets manually."
-            )
-        else:
-            st.warning("Could not find this story reported on trusted news sites across India.")
-            st.info(
-                "💡 **Why Unverified?** The system checks major newspapers covering all states in India. "
-                "If it cannot find any credible news sources reporting this event, it is flagged as suspicious."
-            )
-    
+        st.markdown("#### Source evidence")
+        if prediction.get("message"):
+            st.write(prediction["message"])
+        for match in web_check.get("matches", []):
+            st.link_button(match["title"], match["url"])
+            st.caption(f"{match['domain']} · {match.get('stance', 'RELATED')}")
+
     with col2:
         # Text stats
         st.markdown("#### 📋 Text Analysis Summary")
@@ -455,13 +445,7 @@ with tab1:
             st.warning("⚠️ Please enter at least 5 words for accurate analysis.")
         else:
             with st.spinner("🧠 Analyzing with AI... Please wait..."):
-                # Check cache first
-                cached = get_cached_prediction(cleaned)
-                if cached:
-                    prediction = cached
-                else:
-                    prediction = predict(cleaned)
-                
+                prediction = predict(cleaned)
                 display_results(cleaned, prediction, source="text_input")
     
     elif check_btn and not text_input:
@@ -695,12 +679,12 @@ with tab4:
                 
                 for i, (headline, pred) in enumerate(zip(headlines, predictions)):
                     label = pred.get('label', 'UNKNOWN')
-                    confidence = pred.get('confidence', 0)
+                    confidence = pred.get('confidence')
                     
                     if label == 'FAKE':
                         badge = "🔴"
                         badge_color = "#FF4B4B"
-                    elif label == 'UNABLE TO VERIFY':
+                    elif label != 'REAL':
                         badge = "🟡"
                         badge_color = "#FFBB00"
                     else:
@@ -710,7 +694,7 @@ with tab4:
                     st.markdown(f"""
                     <div class="headline-card">
                         <span style="color: {badge_color}; font-weight: 700;">
-                            {badge} {label} ({confidence:.0%})
+                            {badge} {label} ({format_confidence(confidence)})
                         </span>
                         <br>
                         <span style="font-size: 1rem;">{headline['title']}</span>
@@ -864,9 +848,9 @@ with tab5:
         
         df = pd.DataFrame(history)
         df['Verdict'] = df['prediction_label'].apply(
-            lambda x: f"❌ {x}" if x == 'FAKE' else f"✅ {x}"
+            lambda x: f"{verdict_icon(x)} {x}"
         )
-        df['Confidence'] = df['confidence'].apply(lambda x: f"{x:.1%}")
+        df['Confidence'] = df['confidence'].apply(format_confidence)
         df['Preview'] = df['text_preview'].apply(lambda x: x[:100] + '...' if len(x) > 100 else x)
         
         display_df = df[['Verdict', 'Confidence', 'source', 'language', 'Preview', 'analyzed_at']]
