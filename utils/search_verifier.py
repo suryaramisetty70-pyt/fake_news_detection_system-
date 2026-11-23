@@ -159,7 +159,7 @@ def _matches_domain(domain: str, domains: set) -> bool:
 def _normalize_claim(text: str) -> str:
     # Keep negations, dates, decimal points and word order when comparing claims.
     import unicodedata
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split()).rstrip(".!?।")
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split()).rstrip(".!।")
 
 
 def _source_stance(claim: str, title: str, domain: str) -> str:
@@ -204,6 +204,12 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
     if office:
         return office
 
+    from utils.science_records import check_planet_fact
+
+    science_record = check_planet_fact(text)
+    if science_record:
+        return science_record
+
     query = _extract_search_query(text)
     if len(query.strip()) < 5:
         return result
@@ -242,6 +248,12 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
         suffix = f" - {(source.text or '').strip()}"
         headline = title.removesuffix(suffix).strip()
         stance = "RELATED" if claim_is_question else _source_stance(claim, headline, domain)
+        # An undated relative claim cannot be resolved by an archived headline.
+        if stance in {"REAL", "FAKE"} and re.search(
+            r"\b(?:today|tonight|tomorrow|yesterday|this (?:week|month|year)|right now|currently)\b",
+            claim, re.I,
+        ):
+            stance = "RELATED"
         title_stems = {_stem_word(word) for word in _clean_punctuation(headline).split()}
         if stance == "RELATED" and len(query_stems & title_stems) / len(query_stems) < 0.35:
             continue

@@ -59,21 +59,28 @@ function initCharCounter() {
     const count = document.getElementById("char-count");
     if (input && count) {
         input.addEventListener("input", () => {
+            resetVerification();
             count.textContent = `${input.value.length} characters`;
         });
     }
 }
 
-function clearText() {
+function resetVerification() {
     activeVerification?.abort();
+    activeVerification = undefined;
+    document.getElementById("loading-state").classList.add("hidden");
+    document.getElementById("result-container").classList.add("hidden");
+    document.getElementById("deep-dive-grid").classList.add("hidden");
+    document.getElementById("idle-state").classList.remove("hidden");
+}
+
+function clearText() {
+    resetVerification();
     const input = document.getElementById("news-input");
     if (input) {
         input.value = "";
         document.getElementById("char-count").textContent = "0 characters";
     }
-    document.getElementById("result-container").classList.add("hidden");
-    document.getElementById("deep-dive-grid").classList.add("hidden");
-    document.getElementById("idle-state").classList.remove("hidden");
 }
 
 // ─── Sample Prompts ───
