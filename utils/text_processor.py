@@ -4,7 +4,9 @@ Handles text cleaning, language detection, and preprocessing.
 """
 import re
 import string
-from langdetect import detect, detect_langs
+from langdetect import DetectorFactory, detect_langs
+
+DetectorFactory.seed = 0
 from langdetect.lang_detect_exception import LangDetectException
 
 
@@ -33,15 +35,6 @@ def clean_text(text: str) -> str:
     if not text or not isinstance(text, str):
         return ""
     
-    # Remove URLs
-    text = re.sub(r'https?://\S+|www\.\S+', '', text)
-    
-    # Remove HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
-    
-    # Remove email addresses
-    text = re.sub(r'\S+@\S+', '', text)
-    
     # Remove extra whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     
@@ -62,8 +55,8 @@ def detect_language(text: str) -> dict:
         return {'code': 'unknown', 'name': 'Unknown', 'confidence': 0.0}
     
     try:
-        lang_code = detect(text)
         probabilities = detect_langs(text)
+        lang_code = probabilities[0].lang
         confidence = probabilities[0].prob if probabilities else 0.0
         lang_name = SUPPORTED_LANGUAGES.get(lang_code, f'Other ({lang_code})')
         
@@ -105,71 +98,12 @@ def truncate_text(text: str, max_length: int = 512) -> str:
 
 
 def clean_forwarded_text(raw_text: str) -> str:
-    """Clean WhatsApp/MMS forward junk, timestamps, name prefixes, and emojis.
-    
-    Normalizes ALL CAPS clickbait formatting to sentence case.
-    """
-    if not raw_text or not isinstance(raw_text, str):
+    """Remove only explicit, leading message metadata and preserve the claim."""
+    if not isinstance(raw_text, str):
         return ""
-        
-    text = raw_text.strip()
-    
-    # 1. Remove Forwarded tags (e.g. "Forwarded", "Forwarded many times")
-    text = re.sub(r'(?i)forwarded\s*(many\s*times)?\s*:?\s*', '', text)
-    text = re.sub(r'(?i)forwarded\s*message\s*:?\s*', '', text)
-    
-    # 2. Remove timestamps with brackets (e.g. "[10/08, 3:22 pm]")
-    text = re.sub(r'\[\d{1,2}/\d{1,2}(/\d{2,4})?,\s*\d{1,2}:\d{2}(:\d{2})?(\s*[aApP][mM])?\]', '', text)
-    text = re.sub(r'\[\d{1,2}:\d{2}(:\d{2})?(\s*[aApP][mM])?\]', '', text)
-    
-    # Remove naked dates and times (e.g. "10/08/2026, 12:45 PM" or "12:45 PM")
-    text = re.sub(r'\b\d{1,2}/\d{1,2}(/\d{2,4})?\b', '', text)
-    text = re.sub(r'\b\d{1,2}:\d{2}(:\d{2})?(\s*[aApP][mM])?\b', '', text)
-    
-    # Remove relative timestamps (e.g. "2 days ago", "3 hours ago", "yesterday")
-    text = re.sub(r'(?i)\b\d+\s*(second|sec|minute|min|hour|hr|day|week|month|year)s?\s*ago\b', '', text)
-    text = re.sub(r'(?i)\b(yesterday|today|just now)\b', '', text)
-    
-    # 3. Remove news agency and wire prefixes (e.g. "ANI | ", "PTI - ", "(Reuters) - ")
-    text = re.sub(r'(?i)^\s*(\((ANI|PTI|IANS|AFP|AP|REUTERS|BBC)\)|ANI|PTI|IANS|AFP|AP|REUTERS|BBC)\s*[-|:]\s*', '', text)
-    
-    # 4. Remove standalone single-word source header on the first line (e.g. "Gulte\n...")
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    if len(lines) > 1 and len(lines[0].split()) == 1 and len(lines[0]) < 25:
-        # Check if first line looks like a source name, not a full sentence
-        if not lines[0].endswith(('.', '!', '?')):
-            lines = lines[1:]
-    text = '\n'.join(lines)
-    
-    # 5. Remove sender name prefixes (e.g. "John: " or "+91 99999 99999:")
-    # Handles lines starting with sender names
-    lines = text.split('\n')
-    cleaned_lines = []
-    for line in lines:
-        cleaned_line = re.sub(r'^\s*([\w\s+]+|\+?\d[\d\s-]{5,20}):\s*', '', line)
-        cleaned_lines.append(cleaned_line)
-    text = '\n'.join(cleaned_lines)
-    
-    # Remove any leftover leading colon space
-    text = re.sub(r'^\s*:\s*', '', text)
-    
-    # 6. Strip emojis (strip characters outside Basic Multilingual Plane)
-    text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
-    
-    # 5. Normalize ALL CAPS text
-    # If the entire text is in uppercase, capitalize it to sentence case
-    if text.isupper():
-        text = text.capitalize()
-    else:
-        # Convert individual uppercase words longer than 3 characters (e.g. BREAKING) to lowercase
-        words = text.split()
-        for i, w in enumerate(words):
-            clean_w = re.sub(r'[^\w]', '', w)
-            if len(clean_w) > 3 and clean_w.isupper():
-                words[i] = w.lower()
-        text = ' '.join(words)
-        
-    # 6. Collapse multiple line breaks and whitespaces
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
+    text = re.sub(
+        r"^\s*\[\d{1,2}/\d{1,2}(?:/\d{2,4})?,\s*\d{1,2}:\d{2}(?:\s*[ap]m)?\]\s*",
+        "", raw_text, count=1, flags=re.I,
+    )
+    text = re.sub(r"^\s*forwarded(?: many times| message)?(?:\s*:\s*|\s+)", "", text, count=1, flags=re.I)
+    return " ".join(text.split())

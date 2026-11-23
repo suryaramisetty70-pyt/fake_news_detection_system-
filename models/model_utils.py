@@ -158,7 +158,7 @@ def predict(text: str, use_transformer: bool = True) -> dict:
     elif verdict == "FAKE":
         message = "A fact-checking source explicitly rated this claim false."
     elif verdict == "REAL":
-        message = "Trusted publishers reported a headline matching this claim."
+        message = "A fact-checking source explicitly rated this claim true."
     elif web_check.get("search_failed"):
         message = "Live source search is currently unavailable. Please try again later."
     else:
@@ -171,7 +171,7 @@ def predict(text: str, use_transformer: bool = True) -> dict:
             "FAKE": confidence if verdict == "FAKE" else 0.0,
             "REAL": confidence if verdict == "REAL" else 0.0,
         },
-        "model_type": web_check.get("method", "search_verification"),
+        "model_type": web_check.get("method", "evidence_v2"),
         "web_check": web_check,
         "social_context": social_context,
         "linguistics": linguistics,

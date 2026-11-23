@@ -23,7 +23,7 @@ class VerificationEvidenceTests(unittest.TestCase):
 
     def test_direct_publisher_match(self):
         result = self.verify((self.claim, "Reuters", "reuters.com"))
-        self.assertEqual(result["verdict"], "REAL")
+        self.assertEqual(result["verdict"], "REPORTED")
         self.assertEqual(result["trusted_sources_count"], 1)
 
     def test_related_coverage_and_fact_checker_do_not_decide(self):
@@ -45,6 +45,22 @@ class VerificationEvidenceTests(unittest.TestCase):
             (f'"{self.claim}": False', "Snopes", "snopes.com"),
         )
         self.assertIsNone(result["verdict"])
+
+    def test_false_prefix_and_changed_claim_details(self):
+        from utils.text_processor import clean_forwarded_text
+
+        for claim in ("False: " + self.claim, self.claim + " at 9:30", self.claim + " yesterday",
+                      self.claim + " on 10/08/2026", "No" + "\n" + self.claim):
+            self.assertEqual(clean_forwarded_text(claim), " ".join(claim.split()))
+            self.assertNotEqual(clean_forwarded_text(claim), self.claim)
+        result = self.verify(("False: " + self.claim, "Snopes", "snopes.com"))
+        self.assertEqual(result["verdict"], "FAKE")
+
+    def test_changed_year_and_question_are_unverified(self):
+        for claim in ("The city will close Central Station in 2015", self.claim + "?"):
+            self.claim = claim
+            result = self.verify((claim.replace("2015", "2000").rstrip("?"), "Reuters", "reuters.com"))
+            self.assertIsNone(result["verdict"])
 
     def test_provider_outage(self):
         with patch("requests.get", side_effect=requests.Timeout):

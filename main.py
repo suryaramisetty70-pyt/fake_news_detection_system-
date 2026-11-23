@@ -31,7 +31,7 @@ from database.db_handler import (
     save_scraped_headlines
 )
 
-API_VERSION = "2.0.2"
+API_VERSION = "2.1.0"
 
 app = FastAPI(
     title="🔍 All-India Fake News Detection & Real-Time Verification API",
@@ -149,7 +149,9 @@ def api_ocr_verify(
 ):
     try:
         from utils.image_to_text import extract_text_from_image
-        image_bytes = file.file.read()
+        image_bytes = file.file.read(10 * 1024 * 1024 + 1)
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image uploads must be 10 MB or smaller.")
         
         ocr_result = extract_text_from_image(image_bytes, language=language)
         if not ocr_result.get("success"):
@@ -172,8 +174,10 @@ def api_ocr_verify(
             language=language
         )
         return {"success": True, "extracted_text": extracted_text, "prediction": prediction}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Image processing failed.") from e
 
 
 @app.get("/api/scrapers/sources")

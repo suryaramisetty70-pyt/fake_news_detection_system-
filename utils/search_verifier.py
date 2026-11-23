@@ -164,17 +164,20 @@ def _normalize_claim(text: str) -> str:
 
 def _source_stance(claim: str, title: str, domain: str) -> str:
     if _matches_domain(domain, FACT_CHECK_DOMAINS):
-        checks = re.fullmatch(
-            r'(?:fact[ -]check:\s*)?["“](.+)["”]\s*[:–—-]\s*'
-            r'(false|fake|true)[.!]?',
-            title.strip(),
-            flags=re.IGNORECASE,
-        )
-        if checks and _normalize_claim(checks[1]) == claim:
-            return "REAL" if checks[2].lower() == "true" else "FAKE"
+        assessment = re.sub(r"^fact[ -]check:\s*", "", title.strip(), flags=re.I)
+        suffix = re.fullmatch(r'["“](.+)["”]\s*[:–—-]\s*(false|fake|true)[.!]?', assessment, re.I)
+        prefix = re.fullmatch(r'(false|fake|true):\s*(.+)', assessment, re.I)
+        if suffix:
+            statement, rating = suffix.groups()
+        elif prefix:
+            rating, statement = prefix.groups()
+        else:
+            return "RELATED"
+        if _normalize_claim(statement.strip('"“”')) == claim:
+            return "REAL" if rating.lower() == "true" else "FAKE"
         return "RELATED"
     if _normalize_claim(title) == claim and not title.rstrip().endswith(("?", "？")):
-        return "REAL"
+        return "REPORTED"
     return "RELATED"
 
 
@@ -248,7 +251,17 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
 
     direct = [match for match in matches.values() if match["stance"] != "RELATED"]
     stances = {match["stance"] for match in direct}
-    verdict = next(iter(stances)) if len(stances) == 1 else None
+    ratings = stances - {"REPORTED"}
+    if len(ratings) == 1 and not ("FAKE" in ratings and "REPORTED" in stances):
+        verdict = next(iter(ratings))
+    elif stances == {"REPORTED"}:
+        verdict = "REPORTED"
+        result["message"] = "A publisher used this exact headline. This establishes that it was published. Its factual claims still need independent verification."
+    else:
+        verdict = None
+        if len(stances) > 1:
+            result["message"] = "Sources disagree on this claim. Review the evidence below."
+
     result.update(
         verified=verdict == "REAL",
         verdict=verdict,
