@@ -210,6 +210,12 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
     if science_record:
         return science_record
 
+    from utils.review_archive import archived_review
+
+    review = archived_review(text)
+    if review:
+        return review
+
     query = _extract_search_query(text)
     if len(query.strip()) < 5:
         return result
