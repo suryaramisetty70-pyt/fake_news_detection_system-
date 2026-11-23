@@ -43,19 +43,14 @@ def scrape_headlines(newspaper_key: str, max_headlines: int = 15) -> dict:
     config = NEWSPAPER_SOURCES[newspaper_key]
     
     try:
-        # Add a small random delay to be respectful
-        time.sleep(random.uniform(0.5, 1.5))
-        
-        response = requests.get(
-            config['headlines_url'],
-            headers=HEADERS,
-            timeout=15
-        )
-        response.raise_for_status()
-        response.encoding = config.get('encoding', 'utf-8')
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
+        try:
+            response = requests.get(config["headlines_url"], headers=HEADERS, timeout=(3, 6))
+            response.raise_for_status()
+            response.encoding = config.get("encoding", "utf-8")
+            soup = BeautifulSoup(response.text, "html.parser")
+        except requests.RequestException:
+            soup = BeautifulSoup("", "html.parser")
+
         # Find headlines using configured selectors
         headlines = []
         seen_titles = set()
@@ -67,7 +62,7 @@ def scrape_headlines(newspaper_key: str, max_headlines: int = 15) -> dict:
                 href = elem.get('href', '')
                 
                 # Skip empty, too short, or duplicate titles
-                if not title or len(title) < 10 or title in seen_titles:
+                if not href or not title or len(title) < 10 or title in seen_titles:
                     continue
                 
                 # Build full URL if relative
@@ -119,8 +114,12 @@ def scrape_headlines(newspaper_key: str, max_headlines: int = 15) -> dict:
                                 'newspaper': config['name'],
                                 'language': config['language'],
                             })
-            except Exception:
-                pass
+            except (requests.RequestException, ET.ParseError):
+                return {"success": False, "newspaper": config["name"], "headlines": [],
+                        "error": "Publisher and fallback feed unavailable."}
+            if rss_resp.status_code != 200:
+                return {"success": False, "newspaper": config["name"], "headlines": [],
+                        "error": "Publisher and fallback feed unavailable."}
         
         return {
             'success': True,

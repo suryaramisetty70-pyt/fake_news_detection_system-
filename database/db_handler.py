@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 # Database file location (same directory as the project)
-DB_DIR = Path(__file__).parent.parent / "data"
+DB_DIR = Path(os.environ.get("TRUTHLENS_DATA_DIR", Path(__file__).parent.parent / "data"))
 DB_PATH = DB_DIR / "fake_news_detector.db"
 
 
@@ -233,7 +233,11 @@ def get_analysis_history(limit: int = 50) -> list:
     try:
         conn = _get_connection()
         cursor = conn.execute("""
-            SELECT text_preview, prediction_label, confidence, 
+            SELECT text_preview,
+                   CASE WHEN model_type IN ('evidence_v2', 'official_record')
+                        THEN prediction_label ELSE 'LEGACY RESULT' END AS prediction_label,
+                   CASE WHEN model_type IN ('evidence_v2', 'official_record')
+                        THEN confidence ELSE NULL END AS confidence,
                    source, language, model_type, analyzed_at
             FROM predictions 
             ORDER BY analyzed_at DESC 
@@ -254,10 +258,10 @@ def get_statistics() -> dict:
         
         total = conn.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
         fake = conn.execute(
-            "SELECT COUNT(*) FROM predictions WHERE prediction_label = 'FAKE'"
+            "SELECT COUNT(*) FROM predictions WHERE prediction_label = 'FAKE' AND model_type IN ('evidence_v2','official_record')"
         ).fetchone()[0]
         real = conn.execute(
-            "SELECT COUNT(*) FROM predictions WHERE prediction_label = 'REAL'"
+            "SELECT COUNT(*) FROM predictions WHERE prediction_label = 'REAL' AND model_type IN ('evidence_v2','official_record')"
         ).fetchone()[0]
         
         # Get source breakdown

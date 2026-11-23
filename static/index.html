@@ -54,7 +54,7 @@
             <div class="flex items-center space-x-4">
                 <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 border border-emerald-500/30 text-emerald-400">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                    60+ Verified Indian Publishers Active
+                    Indian and international news sources
                 </span>
                 <a href="/docs" target="_blank" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-surfaceBorder hover:border-primary/50 text-slate-300 hover:text-white transition flex items-center gap-1.5 bg-surface/40">
                     <i data-lucide="code-2" class="w-4 h-4 text-primary"></i>
@@ -150,7 +150,7 @@
                         </div>
                         <h3 class="text-base font-semibold text-slate-200">Awaiting Claim Input</h3>
                         <p class="text-xs text-slate-400 max-w-xs mt-1.5">
-                            Submit any news headline above. TruthLens will cross-reference 60+ Indian media houses, run a 4-model ensemble, and evaluate emotional polarity.
+                            Enter a claim to find published coverage, fact-checks, and available official records.
                         </p>
                     </div>
 
@@ -256,6 +256,7 @@
 
                     <div id="image-preview-wrapper" class="hidden space-y-4">
                         <img id="image-preview" src="" alt="Preview" class="max-h-72 mx-auto rounded-xl border border-surfaceBorder object-contain">
+                        <button type="button" onclick="document.getElementById('ocr-file-input').click()">Choose another image</button>
                         <button onclick="processImageOCR()" id="ocr-run-btn" class="px-6 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-primary to-accent hover:opacity-95 shadow-lg shadow-primary/25 transition">
                             Extract & Verify News
                         </button>
@@ -277,7 +278,7 @@
                     </div>
 
                     <div class="flex items-center gap-3">
-                        <select id="paper-select" class="bg-darkbg border border-surfaceBorder px-4 py-2 rounded-xl text-sm text-slate-100 focus:outline-none">
+                        <select onchange="fetchPaperHeadlines()" id="paper-select" class="bg-darkbg border border-surfaceBorder px-4 py-2 rounded-xl text-sm text-slate-100 focus:outline-none">
                             <option value="the_hindu">The Hindu (English)</option>
                             <option value="ndtv">NDTV (English)</option>
                             <option value="eenadu">Eenadu (Telugu)</option>
@@ -324,7 +325,7 @@
                     <div class="glass-panel p-5 rounded-2xl">
                         <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">Unverified</span>
                         <h3 class="text-2xl font-black text-amber-400 mt-2" id="stat-unverified">--</h3>
-                        <p class="text-xs text-slate-400 mt-1">Zero corroboration</p>
+                        <p class="text-xs text-slate-400 mt-1">Includes historical results and headline matches</p>
                     </div>
                 </div>
 
@@ -335,7 +336,7 @@
                             <i data-lucide="history" class="w-5 h-5 text-primary"></i>
                             Recent Verification Log
                         </h3>
-                        <button onclick="loadHistory()" class="text-xs text-primary hover:underline flex items-center gap-1">
+                        <button onclick="loadHistory(); loadAnalytics()" class="text-xs text-primary hover:underline flex items-center gap-1">
                             <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Refresh
                         </button>
                     </div>

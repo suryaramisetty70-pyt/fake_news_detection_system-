@@ -20,8 +20,9 @@ function safeSourceUrl(value) {
 
 // Initialize Lucide Icons on load
 document.addEventListener("DOMContentLoaded", () => {
-    lucide.createIcons();
+    window.lucide?.createIcons();
     initCharCounter();
+    loadPublishers();
     loadAnalytics();
 });
 
@@ -49,7 +50,7 @@ function switchTab(tabId) {
         loadAnalytics();
     }
 
-    lucide.createIcons();
+    window.lucide?.createIcons();
 }
 
 // ─── Character Counter ───
@@ -58,21 +59,28 @@ function initCharCounter() {
     const count = document.getElementById("char-count");
     if (input && count) {
         input.addEventListener("input", () => {
+            resetVerification();
             count.textContent = `${input.value.length} characters`;
         });
     }
 }
 
-function clearText() {
+function resetVerification() {
     activeVerification?.abort();
+    activeVerification = undefined;
+    document.getElementById("loading-state").classList.add("hidden");
+    document.getElementById("result-container").classList.add("hidden");
+    document.getElementById("deep-dive-grid").classList.add("hidden");
+    document.getElementById("idle-state").classList.remove("hidden");
+}
+
+function clearText() {
+    resetVerification();
     const input = document.getElementById("news-input");
     if (input) {
         input.value = "";
         document.getElementById("char-count").textContent = "0 characters";
     }
-    document.getElementById("result-container").classList.add("hidden");
-    document.getElementById("deep-dive-grid").classList.add("hidden");
-    document.getElementById("idle-state").classList.remove("hidden");
 }
 
 // ─── Sample Prompts ───
@@ -95,7 +103,7 @@ function loadSample(id) {
 // ─── Main Verification Call ───
 let activeVerification;
 
-async function analyzeText() {
+async function analyzeText(source = "text_input") {
     const input = document.getElementById("news-input");
     const text = input ? input.value.trim() : "";
     if (!text || text.length < 8) {
@@ -118,7 +126,7 @@ async function analyzeText() {
             method: "POST",
             signal: AbortSignal.any([verification.signal, AbortSignal.timeout(25000)]),
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, source: "text_input" })
+            body: JSON.stringify({ text, source })
         });
 
         if (!response.ok) {
@@ -158,7 +166,9 @@ function renderResults(data) {
     if (label === "REAL") {
         verdictColor = "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
         badgeText = data.model_type === "official_record"
-            ? "✅ CONFIRMED BY AN OFFICIAL RECORD" : "✅ REPORTED BY TRUSTED SOURCES";
+            ? "✅ CONFIRMED BY AN OFFICIAL RECORD" : "✅ CONFIRMED BY FACT-CHECKER";
+    } else if (label === "REPORTED") {
+        badgeText = "MATCHING PUBLISHED HEADLINE";
     } else if (label === "FAKE") {
         verdictColor = "border-rose-500/40 bg-rose-500/10 text-rose-400";
         badgeText = "❌ CONTRADICTED BY SOURCE";
@@ -179,7 +189,7 @@ function renderResults(data) {
                             <p class="text-slate-400 text-[11px] mt-0.5">Publisher Domain: <span class="text-slate-300 font-mono">${escapeHtml(m.domain)}</span></p>
                         </div>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 border border-emerald-500/30 text-emerald-400 shrink-0">
-                            ${({ REAL: "SUPPORTS", FAKE: "DEBUNKS" })[m.stance] || "RELATED"}
+                            ${({ REAL: "SUPPORTS", FAKE: "DEBUNKS", REPORTED: "HEADLINE MATCH" })[m.stance] || "RELATED"}
                         </span>
                     </div>
                 `).join("")}
@@ -203,7 +213,7 @@ function renderResults(data) {
         </div>
     `;
 
-    lucide.createIcons();
+    window.lucide?.createIcons();
 }
 
 // ─── Deep Dive Grid Renderer ───
@@ -212,39 +222,8 @@ function renderDeepDive(data) {
     grid.classList.remove("hidden");
 
     const ling = data.linguistics || {};
-    const ensemble = data.ensemble || {};
     const social = data.social_context || {};
-    const votes = ensemble.votes || {};
-
     grid.innerHTML = `
-        <!-- Card 1: Multi-Model Voting Ensemble (sneyhaa / vijaisuria inspired) -->
-        <div class="glass-panel p-6 rounded-2xl space-y-4">
-            <div class="flex items-center justify-between">
-                <h4 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4 text-primary"></i>
-                    Writing-Style Signals
-                </h4>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-surface border border-surfaceBorder text-slate-300">
-                    For context only
-                </span>
-            </div>
-
-            <p class="text-xs text-slate-400">These scores describe writing patterns. See the source verdict above for the fact-check.</p>
-            <div class="space-y-2.5 text-xs">
-                ${Object.entries(votes).map(([model, v]) => `
-                    <div class="p-2.5 rounded-xl bg-darkbg border border-surfaceBorder flex items-center justify-between">
-                        <div>
-                            <span class="font-medium text-slate-200 capitalize">${model.replace(/_/g, " ")}</span>
-                            <span class="text-[10px] text-slate-400 block">Vote: ${v.label}</span>
-                        </div>
-                        <span class="font-mono font-bold ${v.label === 'REAL' ? 'text-emerald-400' : 'text-rose-400'}">
-                            ${Math.round((v.prob_real || v.confidence || 0) * 100)}% Real
-                        </span>
-                    </div>
-                `).join("")}
-            </div>
-        </div>
-
         <!-- Card 2: Linguistic & Dual-Emotion (aryashah2k & WWW Dual-Emotion inspired) -->
         <div class="glass-panel p-6 rounded-2xl space-y-4">
             <h4 class="text-sm font-bold text-white flex items-center gap-2">
@@ -275,11 +254,11 @@ function renderDeepDive(data) {
 
                 <div>
                     <div class="flex justify-between text-slate-300 mb-1">
-                        <span>Credibility Index</span>
-                        <span class="font-mono">${ling.credibility_index || 50}%</span>
+                        <span>Writing style score</span>
+                        <span class="font-mono">${ling.credibility_index ?? 50}%</span>
                     </div>
                     <div class="w-full bg-darkbg rounded-full h-2">
-                        <div class="bg-emerald-500 h-2 rounded-full" style="width: ${ling.credibility_index || 50}%"></div>
+                        <div class="bg-emerald-500 h-2 rounded-full" style="width: ${ling.credibility_index ?? 50}%"></div>
                     </div>
                 </div>
             </div>
@@ -314,7 +293,7 @@ function renderDeepDive(data) {
         </div>
     `;
 
-    lucide.createIcons();
+    window.lucide?.createIcons();
 }
 
 // ─── Live Audio Recording (Web Audio API) ───
@@ -328,6 +307,8 @@ async function toggleRecording() {
     const ring = document.getElementById("record-ring");
 
     if (!isRecording) {
+        btn.disabled = true;
+        voiceUpload.disabled = true;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
@@ -336,7 +317,7 @@ async function toggleRecording() {
             mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
             mediaRecorder.onstop = () => {
                 stream.getTracks().forEach(track => track.stop());
-                sendVoiceData(mediaRecorder.mimeType);
+                sendVoiceData(new Blob(audioChunks, { type: mediaRecorder.mimeType }));
             };
 
             mediaRecorder.start();
@@ -344,7 +325,10 @@ async function toggleRecording() {
             status.textContent = "Recording... Click again to stop";
             ring.classList.remove("hidden");
         } catch (err) {
+            voiceUpload.disabled = false;
             alert(`Microphone access error: ${err.message}. Ensure microphone permission is granted.`);
+        } finally {
+            btn.disabled = false;
         }
     } else {
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
@@ -356,8 +340,16 @@ async function toggleRecording() {
     }
 }
 
-async function sendVoiceData(mimeType) {
-    const audioBlob = new Blob(audioChunks, { type: mimeType });
+const voiceUpload = document.getElementById("voice-file-input");
+voiceUpload.addEventListener("change", () => {
+    const file = voiceUpload.files[0];
+    if (file) sendVoiceData(file);
+    voiceUpload.value = "";
+});
+
+async function sendVoiceData(audioBlob) {
+    const mic = document.getElementById("mic-record-btn");
+    mic.disabled = voiceUpload.disabled = true;
     const lang = document.getElementById("voice-lang-select").value;
 
     const formData = new FormData();
@@ -379,7 +371,10 @@ async function sendVoiceData(mimeType) {
         // Show transcription in text tab and switch
         const textInput = document.getElementById("news-input");
         if (textInput) {
+            clearText();
             textInput.value = data.transcription;
+            textInput.dispatchEvent(new Event("input"));
+            document.getElementById("idle-state").classList.add("hidden");
             switchTab("text-tab");
             renderResults(data.prediction);
             renderDeepDive(data.prediction);
@@ -387,6 +382,8 @@ async function sendVoiceData(mimeType) {
     } catch (err) {
         alert(`Voice Error: ${err.message}`);
         status.textContent = "Click to Start Recording";
+    } finally {
+        mic.disabled = voiceUpload.disabled = false;
     }
 }
 
@@ -441,12 +438,44 @@ async function processImageOCR() {
             body: formData
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "OCR extraction failed");
+        if (!response.ok && /unavailable on this server|not installed on this server/i.test(data.error || "")) {
+            btn.textContent = "Reading the image in your browser…";
+            if (!window.Tesseract) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement("script");
+                    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error("Could not load the browser OCR engine."));
+                    document.head.appendChild(script);
+                });
+            }
+            const languages = {English:"eng", Telugu:"tel", Hindi:"hin", Tamil:"tam", Kannada:"kan", Malayalam:"mal", Bengali:"ben", Marathi:"mar"};
+            const worker = await Tesseract.createWorker(languages[lang]);
+            let extracted;
+            try {
+                const result = await worker.recognize(file);
+                extracted = result.data.text.trim();
+            } finally {
+                await worker.terminate();
+            }
+            if (extracted.length < 8) throw new Error("Too little readable text. Try a clearer image.");
+            clearText();
+            const input = document.getElementById("news-input");
+            input.value = extracted;
+            input.dispatchEvent(new Event("input"));
+            switchTab("text-tab");
+            await analyzeText("ocr_image");
+            return;
+        }
+        if (!response.ok) throw new Error(data.error || data.detail || "OCR extraction failed");
 
         // Send to text tab
         const textInput = document.getElementById("news-input");
         if (textInput) {
+            clearText();
             textInput.value = data.extracted_text;
+            textInput.dispatchEvent(new Event("input"));
+            document.getElementById("idle-state").classList.add("hidden");
             switchTab("text-tab");
             renderResults(data.prediction);
             renderDeepDive(data.prediction);
@@ -460,6 +489,20 @@ async function processImageOCR() {
 }
 
 // ─── Live Newspaper Headlines Reader ───
+async function loadPublishers() {
+    const select = document.getElementById("paper-select");
+    try {
+        const response = await fetch("/api/scrapers/sources");
+        if (!response.ok) return;
+        const data = await response.json();
+        const selected = select.value;
+        select.replaceChildren(...Object.entries(data.newspapers).map(([key, name]) => new Option(name, key)));
+        select.value = selected;
+    } catch {
+        // The built-in list is available when the source directory is offline.
+    }
+}
+
 async function fetchPaperHeadlines() {
     const paper = document.getElementById("paper-select").value;
     const grid = document.getElementById("headlines-grid");
@@ -469,6 +512,8 @@ async function fetchPaperHeadlines() {
         const response = await fetch(`/api/scrapers/headlines?newspaper=${paper}&max_count=12`);
         const data = await response.json();
 
+        if (paper !== document.getElementById("paper-select").value) return;
+        if (!response.ok) throw new Error(data.error || "Publisher unavailable");
         if (!data.headlines || data.headlines.length === 0) {
             grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400">No headlines returned. Please try another publisher.</div>`;
             return;
@@ -505,7 +550,7 @@ function checkHeadline(title) {
         input.value = title;
         input.dispatchEvent(new Event("input"));
         switchTab("text-tab");
-        analyzeText();
+        analyzeText("newspaper");
     }
 }
 

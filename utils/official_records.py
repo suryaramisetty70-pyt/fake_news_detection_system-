@@ -58,7 +58,11 @@ def check_current_office(claim: str, now):
         checked_on = TAMIL_NADU_SNAPSHOT_DATE
 
     holder_key = _name_key(holder)
-    aliases = {holder_key, " ".join(holder_key.split()[1:]), holder_key.split()[-1]}
+    aliases = {holder_key}
+    if holder_key == "c joseph vijay":
+        aliases.update({"joseph vijay", "vijay"})
+    elif holder_key == "narendra modi":
+        aliases.update({"modi", "pm modi", "prime minister narendra modi"})
     if person in aliases:
         verdict = "REAL"
     elif person in {"modi", "narendra modi", "pm modi", "prime minister narendra modi"} and "modi" not in holder_key.split():
