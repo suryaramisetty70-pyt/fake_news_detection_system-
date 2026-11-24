@@ -16,6 +16,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime
+from PIL import Image, UnidentifiedImageError
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -335,7 +336,7 @@ with st.sidebar:
 def display_results(text: str, prediction: dict, source: str = "text_input"):
     """Display prediction results with visualizations."""
     label = prediction.get('label', 'UNKNOWN')
-    confidence = prediction.get('confidence')
+    confidence = prediction.get('confidence') or None
     model_type = prediction.get('model_type', 'unknown')
     web_check = prediction.get('web_check', {})
     
@@ -355,7 +356,8 @@ def display_results(text: str, prediction: dict, source: str = "text_input"):
         card_class = 'result-unknown'
         verdict_class = 'verdict-unknown'
         verdict_emoji = '⚠️'
-        verdict_title = 'MATCHING PUBLISHED HEADLINE' if label == 'REPORTED' else 'UNABLE TO VERIFY'
+        verdict_title = {"REPORTED": "MATCHING PUBLISHED HEADLINE", "ARCHIVE SUPPORTED": "SUPPORTED IN 2020 REVIEW",
+                         "ARCHIVE REFUTED": "REFUTED IN 2020 REVIEW"}.get(label, "UNABLE TO VERIFY")
     else:
         card_class = 'result-real'
         verdict_class = 'verdict-real'
@@ -436,13 +438,14 @@ with tab1:
     with col1:
         check_btn = st.button("🔍 Check News", type="primary", use_container_width=True, key="check_text")
     with col2:
-        clear_btn = st.button("🗑️ Clear", use_container_width=True, key="clear_text")
+        st.button("🗑️ Clear", use_container_width=True, key="clear_text",
+                  on_click=st.session_state.update, args=({"text_input_area": ""},))
     
     if check_btn and text_input:
         cleaned = clean_text(text_input)
         
-        if len(cleaned.split()) < 5:
-            st.warning("⚠️ Please enter at least 5 words for accurate analysis.")
+        if len(cleaned) < 8:
+            st.warning("⚠️ Please enter a claim of at least 8 characters.")
         else:
             with st.spinner("🧠 Analyzing with AI... Please wait..."):
                 prediction = predict(cleaned)
@@ -453,28 +456,12 @@ with tab1:
     
     # Example texts for quick testing
     with st.expander("💡 Try Example Texts"):
-        st.markdown("**Example 1 (Likely Fake):**")
-        fake_example = (
-            "SHOCKING!!! Scientists EXPOSED government CONSPIRACY to hide the TRUTH "
-            "about miracle cure!!! SHARE before they DELETE this!!! You WON'T BELIEVE "
-            "what they found!!! URGENT!!!"
-        )
-        if st.button("Try this fake example", key="try_fake"):
-            st.session_state['text_input_area'] = fake_example
-            st.rerun()
-        st.code(fake_example, language=None)
-        
-        st.markdown("**Example 2 (Likely Real):**")
-        real_example = (
-            "According to a study published in the journal Nature, researchers at "
-            "the University of Oxford have confirmed that the new climate model "
-            "accurately predicts temperature changes. The peer-reviewed analysis "
-            "was based on data collected over 30 years from multiple sources."
-        )
-        if st.button("Try this real example", key="try_real"):
-            st.session_state['text_input_area'] = real_example
-            st.rerun()
-        st.code(real_example, language=None)
+        for button_key, example in (("try_fake", "Pluto is a planet"),
+                                    ("try_real", "Earth is the third planet from the Sun"),
+                                    ("try_archive", "Global warming is driving polar bears toward extinction")):
+            st.button(example, key=button_key, on_click=st.session_state.update,
+                      args=({"text_input_area": example},))
+        st.caption("Choose an example, then select Check News.")
 
 
 # ━━━ TAB 2: VOICE INPUT ━━━
@@ -525,23 +512,23 @@ with tab2:
     
     # 2. Audio upload option (works on deployed version)
     st.markdown("#### 📁 Or Upload Audio File")
-    st.caption("Upload a WAV audio file to convert to text and analyze.")
+    st.caption("Upload a recording to transcribe and verify its claim.")
     
     audio_file = st.file_uploader(
-        "Upload audio file (WAV format)",
-        type=['wav'],
+        "Upload audio recording",
+        type=['wav', 'mp3', 'm4a', 'webm', 'ogg', 'flac'],
         key="audio_upload",
-        help="Record audio on your phone/PC and upload the WAV file here."
+        help="Record audio on your phone/PC and upload the recording here."
     )
     
     if audio_file:
-        st.audio(audio_file, format='audio/wav')
+        st.audio(audio_file, format=audio_file.type)
         
         if st.button("🔍 Analyze Voice Input", type="primary", key="analyze_voice"):
             with st.spinner("🎤 Converting speech to text..."):
                 from utils.speech_to_text import convert_audio_to_text
                 
-                audio_bytes = audio_file.read()
+                audio_bytes = audio_file.getvalue()
                 result = convert_audio_to_text(audio_bytes, language=voice_language)
                 
                 if result['success']:
@@ -594,11 +581,16 @@ with tab3:
     )
     
     if uploaded_image:
-        from PIL import Image
-        image = Image.open(uploaded_image)
-        st.image(image, caption="Uploaded Image", width='stretch')
+        try:
+            image = Image.open(uploaded_image)
+            image.load()
+        except (OSError, UnidentifiedImageError, Image.DecompressionBombError):
+            image = None
+            st.error("This file could not be read as an image. Choose a valid news screenshot.")
+        if image is not None:
+            st.image(image, caption="Uploaded Image", width='stretch')
         
-        if st.button("🔍 Analyze Uploaded Image", type="primary", key="analyze_image"):
+        if st.button("🔍 Analyze Uploaded Image", type="primary", key="analyze_image", disabled=image is None):
             with st.spinner("🖼️ Extracting text from image (OCR)..."):
                 result = extract_text_from_image(image, language=ocr_language)
                 

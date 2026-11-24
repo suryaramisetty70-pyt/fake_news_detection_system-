@@ -167,6 +167,8 @@ function renderResults(data) {
         verdictColor = "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
         badgeText = data.model_type === "official_record"
             ? "✅ CONFIRMED BY AN OFFICIAL RECORD" : "✅ CONFIRMED BY FACT-CHECKER";
+    } else if (label === "ARCHIVE SUPPORTED" || label === "ARCHIVE REFUTED") {
+        badgeText = label === "ARCHIVE SUPPORTED" ? "SUPPORTED IN 2020 REVIEW" : "REFUTED IN 2020 REVIEW";
     } else if (label === "REPORTED") {
         badgeText = "MATCHING PUBLISHED HEADLINE";
     } else if (label === "FAKE") {
@@ -189,7 +191,7 @@ function renderResults(data) {
                             <p class="text-slate-400 text-[11px] mt-0.5">Publisher Domain: <span class="text-slate-300 font-mono">${escapeHtml(m.domain)}</span></p>
                         </div>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 border border-emerald-500/30 text-emerald-400 shrink-0">
-                            ${({ REAL: "SUPPORTS", FAKE: "DEBUNKS", REPORTED: "HEADLINE MATCH" })[m.stance] || "RELATED"}
+                            ${({ REAL: "SUPPORTS", FAKE: "DEBUNKS", REPORTED: "HEADLINE MATCH", ARCHIVED: "2020 ARCHIVE" })[m.stance] || "RELATED"}
                         </span>
                     </div>
                 `).join("")}
