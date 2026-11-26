@@ -97,6 +97,25 @@ class ReviewerClaimTests(unittest.TestCase):
             self.assertIsNone(check_current_office("Modi is the CM of Tamil Nadu?", now))
             self.assertIsNone(check_current_office("Modi is not the CM of Tamil Nadu", now))
 
+    def test_office_word_order_preserves_claim_scope(self):
+        from datetime import datetime, timezone
+        from utils.official_records import check_current_office
+
+        cases = {
+            "Modi is Tamil Nadu CM": "FAKE",
+            "The CM of Tamil Nadu is Modi.": "FAKE",
+            "Vijay is the current Chief Minister of Tamil Nadu": "REAL",
+            "Tamil Nadu CM is C. Joseph Vijay": "REAL",
+            "The CM of Tamil Nadu is not Modi": None,
+            "Modi was Tamil Nadu CM": None,
+            "Tamil Nadu CM is Modi and Vijay resigned": None,
+        }
+        with patch("utils.official_records._fetch_tamil_nadu_holder", return_value="C. Joseph Vijay"):
+            for claim, expected in cases.items():
+                with self.subTest(claim=claim):
+                    result = check_current_office(claim, datetime.now(timezone.utc))
+                    self.assertEqual(result and result["verdict"], expected)
+
     def test_snapshot_expires_and_newer_live_record_takes_priority(self):
         from datetime import datetime, timezone
 

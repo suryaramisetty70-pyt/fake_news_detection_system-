@@ -11,11 +11,13 @@ from bs4 import BeautifulSoup
 TAMIL_NADU_SOURCE = "https://www.tn.gov.in/governor.php"
 TAMIL_NADU_SNAPSHOT_DATE = date(2026, 11, 17)
 TAMIL_NADU_SNAPSHOT_HOLDER = "C. Joseph Vijay"
-TAMIL_NADU_CLAIM = re.compile(
-    r"(?P<person>[\w.]+(?: [\w.]+){0,6}) (?:is|as|=) "
-    r"(?:currently )?(?:the )?(?:cm|chief minister) (?:of|for) "
-    r"(?:tamil ?nadu|t\.?n\.?)",
-    re.IGNORECASE,
+PERSON = r"(?P<person>[\w.]+(?: [\w.]+){0,6})"
+REGION = r"(?:tamil ?nadu|t\.?n\.?)"
+ROLE = r"(?:cm|chief minister)"
+OFFICE = rf"(?:(?:current )?{ROLE} (?:of|for) {REGION}|(?:current )?{REGION} {ROLE})"
+OFFICE_CLAIMS = (
+    re.compile(rf"{PERSON} (?:is|as|=) (?:currently )?(?:the )?{OFFICE}", re.I),
+    re.compile(rf"(?:the )?{OFFICE} is (?:currently )?{PERSON}", re.I),
 )
 
 
@@ -44,7 +46,11 @@ def check_current_office(claim: str, now):
     """Return evidence for recognized identities and present-tense office claims."""
     if claim.rstrip().endswith(("?", "？")):
         return None
-    match = TAMIL_NADU_CLAIM.fullmatch(" ".join(claim.split()).rstrip(".!"))
+    statement = " ".join(claim.split()).rstrip(".!")
+    for pattern in OFFICE_CLAIMS:
+        match = pattern.fullmatch(statement)
+        if match:
+            break
     if not match:
         return None
 
