@@ -173,7 +173,7 @@ function renderResults(data) {
         badgeText = "MATCHING PUBLISHED HEADLINE";
     } else if (label === "FAKE") {
         verdictColor = "border-rose-500/40 bg-rose-500/10 text-rose-400";
-        badgeText = "❌ CONTRADICTED BY SOURCE";
+        badgeText = "❌ FALSE CLAIM — CONTRADICTED BY SOURCE";
         descText = data.message || "This claim has been contradicted or flagged by official fact-checking agencies.";
     }
 

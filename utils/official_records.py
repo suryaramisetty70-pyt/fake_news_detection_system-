@@ -15,9 +15,10 @@ PERSON = r"(?P<person>[\w.]+(?: [\w.]+){0,6})"
 REGION = r"(?:tamil ?nadu|t\.?n\.?)"
 ROLE = r"(?:cm|chief minister)"
 OFFICE = rf"(?:(?:current )?{ROLE} (?:of|for) {REGION}|(?:current )?{REGION} {ROLE})"
+NEGATION = r"(?P<negation>not )?"
 OFFICE_CLAIMS = (
-    re.compile(rf"{PERSON} (?:is|as|=) (?:currently )?(?:the )?{OFFICE}", re.I),
-    re.compile(rf"(?:the )?{OFFICE} is (?:currently )?{PERSON}", re.I),
+    re.compile(rf"{PERSON} (?:is|as|=) (?:currently )?{NEGATION}(?:the )?{OFFICE}", re.I),
+    re.compile(rf"(?:the )?{OFFICE} is (?:currently )?{NEGATION}{PERSON}", re.I),
 )
 
 
@@ -64,17 +65,20 @@ def check_current_office(claim: str, now):
         checked_on = TAMIL_NADU_SNAPSHOT_DATE
 
     holder_key = _name_key(holder)
-    aliases = {holder_key}
-    if holder_key == "c joseph vijay":
-        aliases.update({"joseph vijay", "vijay"})
-    elif holder_key == "narendra modi":
-        aliases.update({"modi", "pm modi", "prime minister narendra modi"})
-    if person in aliases:
-        verdict = "REAL"
-    elif person in {"modi", "narendra modi", "pm modi", "prime minister narendra modi"} and "modi" not in holder_key.split():
-        verdict = "FAKE"
+    # Only identify aliases we recognize. Unfamiliar names can have multiple spellings.
+    known_names = (
+        {"c joseph vijay", "joseph vijay", "vijay"},
+        {"narendra modi", "modi", "pm modi", "prime minister narendra modi"},
+        {"m k stalin", "mk stalin", "muthuvel karunanidhi stalin"},
+    )
+    holder_names = next((names for names in known_names if holder_key in names), {holder_key})
+    if person in holder_names:
+        holds_office = True
+    elif any(person in names for names in known_names) and any(holder_key in names for names in known_names):
+        holds_office = False
     else:
         return None
+    verdict = "REAL" if holds_office != bool(match["negation"]) else "FAKE"
 
     title = f"Government of Tamil Nadu lists {holder} as Chief Minister"
     return {

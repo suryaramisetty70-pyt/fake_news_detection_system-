@@ -95,7 +95,7 @@ class ReviewerClaimTests(unittest.TestCase):
             self.assertEqual(check_current_office("Vijay is the CM of Tamil Nadu", now)["verdict"], "REAL")
             self.assertIsNone(check_current_office("Modi was the CM of Tamil Nadu", now))
             self.assertIsNone(check_current_office("Modi is the CM of Tamil Nadu?", now))
-            self.assertIsNone(check_current_office("Modi is not the CM of Tamil Nadu", now))
+            self.assertEqual(check_current_office("Modi is not the CM of Tamil Nadu", now)["verdict"], "REAL")
 
     def test_office_word_order_preserves_claim_scope(self):
         from datetime import datetime, timezone
@@ -106,7 +106,11 @@ class ReviewerClaimTests(unittest.TestCase):
             "The CM of Tamil Nadu is Modi.": "FAKE",
             "Vijay is the current Chief Minister of Tamil Nadu": "REAL",
             "Tamil Nadu CM is C. Joseph Vijay": "REAL",
-            "The CM of Tamil Nadu is not Modi": None,
+            "The CM of Tamil Nadu is not Modi": "REAL",
+            "Vijay is not the CM of Tamil Nadu": "FAKE",
+            "M.K. Stalin is the current Chief Minister of Tamil Nadu": "FAKE",
+            "M.K. Stalin was the Chief Minister of Tamil Nadu": None,
+            "Vijay is not the CM of Tamil Nadu in this film": None,
             "Modi was Tamil Nadu CM": None,
             "Tamil Nadu CM is Modi and Vijay resigned": None,
         }
