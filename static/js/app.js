@@ -124,7 +124,7 @@ async function analyzeText(source = "text_input") {
     try {
         const response = await fetch("/api/verify", {
             method: "POST",
-            signal: AbortSignal.any([verification.signal, AbortSignal.timeout(25000)]),
+            signal: AbortSignal.any([verification.signal, AbortSignal.timeout(50000)]),
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, source })
         });

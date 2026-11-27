@@ -234,13 +234,24 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
         items = ET.fromstring(response.content).findall("./channel/item")
     except (requests.RequestException, ET.ParseError):
         result["search_failed"] = True
-        return result
+        items = []
 
     claim = _normalize_claim(text)
     claim_is_question = text.rstrip().endswith(("?", "？"))
     query_stems = {_stem_word(word) for word in query.split()}
     matches = {}
     result["total_results_count"] = len(items)
+    relative_time = re.search(
+        r"\b(?:today|tonight|tomorrow|yesterday|this (?:week|month|year)|right now|currently)\b", claim,
+    )
+    if not claim_is_question and not relative_time:
+        from utils.publisher_reviews import find_publisher_reviews
+
+        for review in find_publisher_reviews(text, query):
+            matches[(review["domain"], review["stance"])] = review
+            result["total_results_count"] += 1
+            result["search_failed"] = False
+
     for item in items:
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
@@ -255,10 +266,7 @@ def verify_claim_on_web(text: str, lang_code: str = "en") -> dict:
         headline = title.removesuffix(suffix).strip()
         stance = "RELATED" if claim_is_question else _source_stance(claim, headline, domain)
         # An undated relative claim cannot be resolved by an archived headline.
-        if stance in {"REAL", "FAKE"} and re.search(
-            r"\b(?:today|tonight|tomorrow|yesterday|this (?:week|month|year)|right now|currently)\b",
-            claim, re.I,
-        ):
+        if stance in {"REAL", "FAKE"} and relative_time:
             stance = "RELATED"
         title_stems = {_stem_word(word) for word in _clean_punctuation(headline).split()}
         if stance == "RELATED" and len(query_stems & title_stems) / len(query_stems) < 0.35:
